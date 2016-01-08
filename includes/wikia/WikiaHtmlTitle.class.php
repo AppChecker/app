@@ -41,14 +41,6 @@ class WikiaHtmlTitle {
 	}
 
 	/**
-	 * Get brand name
-	 * @return String
-	 */
-	public function getBrandName() {
-		return $this->brandName->inContentLanguage()->escaped();
-	}
-
-	/**
 	 * Set the HTML title parts
 	 *
 	 * You can pass an empty array: the generated title will be wiki name + brand name
@@ -69,18 +61,7 @@ class WikiaHtmlTitle {
 	 * @return $this
 	 */
 	public function setParts( array $parts ) {
-		$newParts = [];
-
-		foreach ( $parts as $part ) {
-			if ( $part instanceof Message ) {
-				$newParts[] = $part->inContentLanguage()->escaped();
-			}
-			if ( is_string( $part ) ) {
-				$newParts[] = $part;
-			}
-		}
-
-		$this->parts = $newParts;
+		$this->parts = $parts;
 		return $this;
 	}
 
@@ -95,7 +76,18 @@ class WikiaHtmlTitle {
 			$this->parts,
 			[$this->siteName, $this->brandName]
 		);
-		return array_filter( $parts, function ( $part ) {
+
+		$stringParts = array_map( function( $part ) {
+			if ( $part instanceof Message ) {
+				return $part->inContentLanguage()->text();
+			}
+			if ( is_string( $part ) ) {
+				return $part;
+			}
+			return null;
+		}, $parts );
+
+		return array_filter( $stringParts, function ( $part ) {
 			return !empty( $part );
 		} );
 	}
