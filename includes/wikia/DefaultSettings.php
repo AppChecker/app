@@ -1192,6 +1192,12 @@ $wgWikiaHubsFileRepoPath = 'http://corp.wikia.com/';
 $wgWikiaHubsFileRepoDirectory = '/images/c/corp/images';
 
 /**
+ * @name $wgEnableNielsen
+ * Enables Nielsen Digital Content Ratings
+ */
+$wgEnableNielsen = false;
+
+/**
  * @name $wgEnableAmazonMatch
  * Enables AmazonMatch new integration (id=3115)
  */
