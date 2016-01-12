@@ -570,10 +570,11 @@ class FlagsApiController extends FlagsApiBaseController {
 
 			foreach ( $flagsIds as $flagId ) {
 				$insightsFlagsModel->initModel( [ 'flagTypeId' => $flagId ] );
+				$insightsCache = new InsightsCache( $insightsFlagsModel->getConfig() );
 				if ( !is_null( $pageId ) ) {
-					$insightsFlagsModel->updateInsightsCache( $pageId );
+					$insightsCache->updateInsightsCache( $pageId );
 				} else {
-					$insightsFlagsModel->purgeInsightsCache();
+					$insightsCache->purgeInsightsCache();
 				}
 			}
 		}
