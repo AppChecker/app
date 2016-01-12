@@ -19,6 +19,9 @@ describe('Taboola ', function () {
 			slotTweaker: {
 				show: noop
 			},
+			taboolaHelper: {
+				loadTaboola: noop
+			},
 			abTest: {
 				getGroup: noop
 			},
@@ -54,6 +57,7 @@ describe('Taboola ', function () {
 			mocks.adContext,
 			mocks.recoveryHelper,
 			mocks.slotTweaker,
+			mocks.taboolaHelper,
 			mocks.abTest,
 			mocks.geo,
 			mocks.instantGlobals,
