@@ -39,4 +39,6 @@ $messages = array_merge( $messages, array(
 'copyrightpage' => 'w:Wikia:Licensing|Wikia:Licensing',
 'addnewtalksection-link' => 'Lisää uusi osio',
 'wikia-pagetitle' => '$1 – Wikia',
+'group-content-moderator' => 'Modérateurs de contenu',
+'group-content-moderator-member' => 'Modérateur de contenu',
 ) );
