@@ -78,6 +78,8 @@ define('ext.wikia.adEngine.slot.floatingMedrec', [
 		win.addEventListener('resize', adHelper.throttle(update));
 
 		win.adslots2.push(slotName);
+
+		update();
 	}
 
 	return {
