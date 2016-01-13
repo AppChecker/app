@@ -15,7 +15,7 @@ define('ext.wikia.adEngine.slot.floatingMedrec', [
 	function init() {
 		var context = adContext.getContext(),
 			positionFixed = false,
-			threshold = 10,
+			margin = 10,
 			slotName = 'INCONTENT_BOXAD_1',
 			$slot = $('<div class="wikia-ad" style="position: relative;"></div>').attr('id', slotName),
 			$placeHolder = $('#WikiaAdInContentPlaceHolder'),
@@ -37,11 +37,11 @@ define('ext.wikia.adEngine.slot.floatingMedrec', [
 		globalNavigationHeight = $globalNavigation.height();
 		lastAdHeight = $slot.height();
 
-		startPosition = parseInt($placeHolder.offset().top, 10) - globalNavigationHeight - threshold;
+		startPosition = parseInt($placeHolder.offset().top, 10) - globalNavigationHeight - margin;
 
 		stopPosition = Math.min(
 			parseInt($footer.offset().top, 10),
-			parseInt($leftSkyscraper3.offset().top, 10)) - globalNavigationHeight - 2 * threshold - lastAdHeight;
+			parseInt($leftSkyscraper3.offset().top, 10)) - globalNavigationHeight - 2 * margin - lastAdHeight;
 
 		function update() {
 			if (lastAdHeight !== $slot.height()) {
@@ -60,7 +60,7 @@ define('ext.wikia.adEngine.slot.floatingMedrec', [
 			if (win.scrollY > startPosition && win.scrollY < stopPosition) {
 				$slot.css({
 					position: 'fixed',
-					top: globalNavigationHeight + threshold + 'px'
+					top: globalNavigationHeight + margin + 'px'
 				});
 				positionFixed = true;
 			}
