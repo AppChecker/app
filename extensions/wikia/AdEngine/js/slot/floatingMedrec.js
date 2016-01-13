@@ -35,7 +35,6 @@ define('ext.wikia.adEngine.slot.floatingMedrec', [
 		$placeHolder.append($slot);
 
 		globalNavigationHeight = $globalNavigation.height();
-
 		lastAdHeight = $slot.height();
 
 		startPosition = parseInt($placeHolder.offset().top, 10) - globalNavigationHeight - margin;
