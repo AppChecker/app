@@ -7,7 +7,6 @@ define('ext.wikia.adEngine.taboolaHelper', [
 	'use strict';
 
 	var context = adContext.getContext(),
-		logGroup = 'ext.wikia.adEngine.provider.taboola',
 		libraryLoaded = false,
 		pageType = context.targeting.pageType;
 
