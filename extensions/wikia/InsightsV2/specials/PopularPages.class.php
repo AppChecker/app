@@ -41,7 +41,6 @@ class PopularPages extends PageQueryPage {
 		 * 1. Get the new data first
 		 */
 		$popularPages = $this->reallyDoQuery();
-		$dbw->begin();
 
 		/**
 		 * 2. Delete the existing records
@@ -67,13 +66,9 @@ class PopularPages extends PageQueryPage {
 				->VALUES( $popularPages )
 				->run( $dbw );
 
+			wfWaitForSlaves();
 			$num = $dbw->affectedRows();
-			if ( $num === 0 ) {
-				$dbw->rollback();
-				$num = false;
-			} else {
-				$dbw->commit();
-			}
+
 		}
 
 		wfRunHooks( 'PopularPagesQueryRecached' );
