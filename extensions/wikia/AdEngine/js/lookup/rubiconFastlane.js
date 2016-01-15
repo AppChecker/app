@@ -70,7 +70,7 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 	}
 
 	function setTargeting(slotName, targeting, rubiconSlot, provider) {
-		var s1 = context.targeting.wikiIsTop1000 ? adLogicZoneParams.getMappedVertical() : 'not a top1k wiki';
+		var s1 = context.targeting.wikiIsTop1000 ? adLogicZoneParams.getName() : 'not a top1k wiki';
 		if (targeting) {
 			Object.keys(targeting).forEach(function (key) {
 				rubiconSlot.setFPI(key, targeting[key]);
@@ -100,6 +100,29 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 		});
 	}
 
+	function configureHomePageSlots() {
+		var slotName;
+		for (slotName in slots) {
+			if (slots.hasOwnProperty(slotName) && slotName.indexOf('TOP') > -1) {
+				slots['HOME_' + slotName] = slots[slotName];
+				delete slots[slotName];
+			}
+		}
+		slots.PREFOOTER_MIDDLE_BOXAD = {
+			sizes: [[300, 250]],
+			targeting: {loc: 'footer'}
+		};
+	}
+
+	function getSlots(skin) {
+		slots = config[skin];
+		if (skin === 'oasis' && context.targeting.pageType === 'home') {
+			configureHomePageSlots();
+		}
+
+		return slots;
+	}
+
 	function defineSlots(skin, onResponse) {
 		var definedSlots = getSlots(skin);
 		Object.keys(definedSlots).forEach(function (slotName) {
@@ -110,25 +133,6 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 				slots: rubiconSlots
 			});
 		});
-	}
-
-	function configureHomePageSlots() {
-		var slotName;
-		for (slotName in slots) {
-			if (slots.hasOwnProperty(slotName) && slotName.indexOf('TOP') > -1) {
-				slots['HOME_' + slotName] = slots[slotName];
-				delete slots[slotName];
-			}
-		}
-	}
-
-	function getSlots(skin) {
-		slots = config[skin];
-		if (skin === 'oasis' && context.targeting.pageType === 'home') {
-			configureHomePageSlots();
-		}
-
-		return slots;
 	}
 
 	function getSlotParams(slotName) {
