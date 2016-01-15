@@ -262,6 +262,4 @@ Zmień [[Special:Preferences#prefsection-1|swoje preferencje]], aby używać wid
 
 'group-content-moderator' => 'Moderatorzy treści',
 'group-content-moderator-member' => 'Moderator treści',
-'group-threadmoderator' => 'Moderatorzy dyskusji',
-'group-threadmoderator-member' => 'Moderator dyskusji',
 ) );

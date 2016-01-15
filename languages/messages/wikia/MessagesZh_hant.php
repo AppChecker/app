@@ -9,6 +9,4 @@ $messages = array_merge( $messages, array(
 
 'group-content-moderator' => '內容版主',
 'group-content-moderator-member' => '內容版主',
-'group-threadmoderator' => '話題版主',
-'group-threadmoderator-member' => '話題版主',
 ) );

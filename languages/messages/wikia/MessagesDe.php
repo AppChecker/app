@@ -174,6 +174,4 @@ Auf dieser Spezialseite kannst Du die '''letzten Änderungen''' in diesem Wiki n
 
 'group-content-moderator' => 'Inhaltsmoderatoren',
 'group-content-moderator-member' => 'Inhaltsmoderator',
-'group-threadmoderator' => 'Diskussionsmoderatoren',
-'group-threadmoderator-member' => 'Diskussionsmoderator',
 ) );

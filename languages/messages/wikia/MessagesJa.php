@@ -164,6 +164,4 @@ $messages = array_merge( $messages , array(
 
 'group-content-moderator' => 'コンテンツ・モデレーター',
 'group-content-moderator-member' => 'コンテンツ・モデレーター',
-'group-threadmoderator' => 'トーク・モデレーター',
-'group-threadmoderator-member' => 'トーク・モデレーター',
 ));

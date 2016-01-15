@@ -12,6 +12,4 @@ $messages = array_merge( $messages, array(
 
 'group-content-moderator' => 'Moderatori di contenuti',
 'group-content-moderator-member' => 'Moderatore di contenuti',
-'group-threadmoderator' => 'Moderatori di discussioni',
-'group-threadmoderator-member' => 'Moderatore di discussioni',
 ) );
