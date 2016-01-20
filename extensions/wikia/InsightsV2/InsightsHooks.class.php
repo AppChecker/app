@@ -100,10 +100,14 @@ class InsightsHooks {
 	 */
 	public static function onwgQueryPages( Array &$wgQueryPages ) {
 		global $wgEnableInsightsInfoboxes, $wgEnableTemplateClassificationExt,
-			   $wgEnableInsightsPagesWithoutInfobox, $wgEnableInsightsTemplatesWithoutType;
+			   $wgEnableInsightsPagesWithoutInfobox, $wgEnableInsightsPopularPages, $wgEnableInsightsTemplatesWithoutType;
 
 		if ( !empty( $wgEnableInsightsInfoboxes ) ) {
 			$wgQueryPages[] = [ 'UnconvertedInfoboxesPage', 'Nonportableinfoboxes' ];
+		}
+
+		if ( !empty( $wgEnableInsightsPopularPages ) ) {
+			$wgQueryPages[] = [ 'PopularPages', 'Popularpages' ];
 		}
 
 		if ( !empty( $wgEnableTemplateClassificationExt ) ) {
@@ -128,7 +132,7 @@ class InsightsHooks {
 	public static function onAfterUpdateSpecialPages( $queryPage ) {
 		$queryPageName = strtolower( $queryPage->getName() );
 
-		$model = InsightsHelper::getInsightModel( $queryPageName, null );
+		$model = InsightsHelper::getInsightModel( $queryPageName );
 
 		if ( $model instanceof InsightsQueryPageModel && $model->purgeCacheAfterUpdateTask() ) {
 			( new InsightsCache( $model->getConfig() ) )->purgeInsightsCache();
@@ -144,9 +148,9 @@ class InsightsHooks {
 		if ( !RecognizedTemplatesProvider::isUnrecognized( $templateType ) ) {
 			$model = new InsightsTemplatesWithoutTypeModel();
 			$model->removeFixedItem( TemplatesWithoutTypePage::TEMPLATES_WITHOUT_TYPE_TYPE, $title );
-			$model->updateInsightsCache( $pageId );
+			( new InsightsCache( $model->getConfig() ) )->updateInsightsCache( $pageId );
 		}
 		return true;
 	}
 
-} 
+}
