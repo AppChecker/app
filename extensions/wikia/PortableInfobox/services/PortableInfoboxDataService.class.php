@@ -1,17 +1,30 @@
 <?php
 
+use Wikia\PortableInfobox\Helpers\PagePropsProxy;
+use Wikia\PortableInfobox\Helpers\PortableInfoboxTemplatesHelper;
+use Wikia\PortableInfobox\Parser\Nodes\NodeInfobox;
+
 class PortableInfoboxDataService {
 
 	const IMAGE_FIELD_TYPE = 'image';
 	const INFOBOXES_PROPERTY_NAME = 'infoboxes';
 
-	/**
-	 * @var Title $title
-	 */
 	protected $title;
+	protected $templateHelper;
+	protected $propsProxy;
+	protected $cache;
+	protected $cachekey;
 
+	/**
+	 * @param $title Title
+	 *
+	 * @internal param $helper
+	 */
 	protected function __construct( $title ) {
-		$this->title = $title;
+		$this->title = $title !== null ? $title : new Title();
+		$this->templateHelper = new PortableInfoboxTemplatesHelper();
+		$this->propsProxy = new PagePropsProxy();
+		$this->cachekey = wfMemcKey( __CLASS__, $this->title->getArticleID(), self::INFOBOXES_PROPERTY_NAME );
 	}
 
 	public static function newFromTitle( $title ) {
@@ -22,127 +35,161 @@ class PortableInfoboxDataService {
 		return new PortableInfoboxDataService( Title::newFromID( $pageid ) );
 	}
 
+	// set internal helpers methods
+	public function setTemplatesHelper( $helper ) {
+		$this->templateHelper = $helper;
+
+		return $this;
+	}
+
+	public function setPagePropsProxy( $proxy ) {
+		$this->propsProxy = $proxy;
+
+		return $this;
+	}
+
 	/**
-	 * Returns infobox data
+	 * Returns infobox data, chain terminator method
 	 *
-	 * @return array in format [ 'data' => [], 'sources' => [] ] or [] will be returned
+	 * @return array in format [ [ 'data' => [], 'sources' => [] ] or [] will be returned
 	 */
 	public function getData() {
-		if ( $this->title && $this->title->exists() ) {
-			$data = $this->getParsedInfoboxes( $this->title );
+		if ( $this->title && $this->title->exists() && $this->title->inNamespace( NS_TEMPLATE ) ) {
+			$incOnlyTemplates = $this->templateHelper->parseInfoboxes( $this->title );
+			if ( $incOnlyTemplates ) {
+				$this->delete();
+				$this->set( $incOnlyTemplates );
+			};
+		}
+		$result = $this->get();
 
-			//return empty [] to prevent false on non existing infobox data
-			return $data ? $data : [ ];
+		return $result !== null ? $result : [ ];
+	}
+
+	/**
+	 * Get image list from multiple infoboxes data
+	 *
+	 * @return array
+	 */
+	public function getImages() {
+		$images = [];
+		foreach ( $this->getData() as $infobox ) {
+			if ( is_array( $infobox[ 'data' ] ) ) {
+				$images = array_merge( $images, $this->getImageFromOneInfoboxData( $infobox[ 'data' ] ) );
+			}
+		}
+		return array_unique( $images );
+	}
+
+	/**
+	 * Get image list from single infobox data
+	 *
+	 * @return array
+	 */
+	private function getImageFromOneInfoboxData( $infoboxData ) {
+		$images = [];
+		foreach ( $infoboxData as $infoboxDataField ) {
+			if ( $infoboxDataField[ 'type' ] === self::IMAGE_FIELD_TYPE && isset( $infoboxDataField[ 'data' ] ) ) {
+				$images = array_merge( $images, $this->getImagesFromOneNodeImageData( $infoboxDataField[ 'data' ] ) );
+			}
+		}
+		return $images;
+	}
+
+	/**
+	 * Get image list from single NodeImage data
+	 *
+	 * @return array
+	 */
+	private function getImagesFromOneNodeImageData( $nodeImageData ) {
+		$images = [];
+		for ( $i = 0; $i < count( $nodeImageData ); $i++ ) {
+			if ( !empty( $nodeImageData[ $i ] [ 'key' ] ) ) {
+				$images[] = $nodeImageData[ $i ][ 'key' ];
+			}
+		}
+		return $images;
+	}
+
+	/**
+	 * Save infobox data, permanently
+	 *
+	 * @param NodeInfobox $raw infobox parser output
+	 *
+	 * @return $this
+	 */
+	public function save( NodeInfobox $raw ) {
+		if ( $raw ) {
+			$stored = $this->get();
+			$stored[] = [ 'data' => $raw->getRenderData(), 'sources' => $raw->getSource() ];
+			$this->set( $stored );
+		}
+
+		return $this;
+	}
+
+	/**
+	 * Remove infobox data from page props and memcache
+	 */
+	public function delete() {
+		$this->clear();
+		unset( $this->cache );
+
+		return $this;
+	}
+
+	/**
+	 * Purge mem cache and local cache
+	 */
+	public function purge() {
+		WikiaDataAccess::cachePurge( $this->cachekey );
+		unset( $this->cache );
+
+		return $this;
+	}
+
+	// soft cache handlers
+	protected function get() {
+		if ( !isset( $this->cache ) ) {
+			$this->cache = $this->load();
+		}
+
+		return $this->cache;
+	}
+
+	protected function set( $data ) {
+		$this->store( $data );
+		$this->cache = $data;
+	}
+
+	// PageProps handlers with memcache wrappers
+	protected function load() {
+		$id = $this->title->getArticleID();
+		if ( $id ) {
+			return WikiaDataAccess::cache( $this->cachekey, WikiaResponse::CACHE_STANDARD, function () use ( $id ) {
+				return json_decode( $this->propsProxy->get( $id, self::INFOBOXES_PROPERTY_NAME ), true );
+			} );
 		}
 
 		return [ ];
 	}
 
-	/**
-	 * Get image list from infobox data
-	 *
-	 * @return array
-	 */
-	public function getImages() {
-		$images = [ ];
-
-		foreach ( $this->getData() as $infobox ) {
-			// ensure data array exists
-			$data = is_array( $infobox[ 'data' ] ) ? $infobox[ 'data' ] : [ ];
-			foreach ( $data as $field ) {
-				if ( $field[ 'type' ] == self::IMAGE_FIELD_TYPE && isset( $field[ 'data' ] ) && !empty( $field[ 'data' ][ 'key' ] ) ) {
-					$images[ $field[ 'data' ][ 'key' ] ] = true;
-				}
-			}
+	protected function store( $data ) {
+		$id = $this->title->getArticleID();
+		if ( $id ) {
+			WikiaDataAccess::cacheWithOptions( $this->cachekey, function () use ( $data ) {
+				return $data;
+			}, [ 'command' => WikiaDataAccess::REFRESH_CACHE, 'cacheTTL' => WikiaResponse::CACHE_STANDARD ] );
+			$this->propsProxy->set( $id, [ self::INFOBOXES_PROPERTY_NAME => json_encode( $data ) ] );
 		}
-
-		return array_keys( $images );
 	}
 
-	/**
-	 * @desc For given Title, get property 'infoboxes' from parser output. If property is empty, this may mean that
-	 * template is inside the <noinclude> tag. In this case, we want to skip the <includeonly> tags, get from this only
-	 * infoboxes and parse them again to check their presence and get params.
-	 * @param $title Title
-	 * @return mixed
-	 */
-	protected function getParsedInfoboxes( $title ) {
-		$article = Article::newFromTitle( $title, RequestContext::getMain() );
-
-		if ( $title->getNamespace() === NS_TEMPLATE ) {
-			$templateText = $article->fetchContent();
-			$includeonlyText = $this->getIncludeonlyText( $templateText );
-
-			if ( $includeonlyText ) {
-				$parser = new Parser();
-				$parserOptions = new ParserOptions();
-				$frame = $parser->getPreprocessor()->newFrame();
-
-				$templateTextWithoutIncludeonly = $parser->getPreloadText( $includeonlyText, $article->getTitle(), $parserOptions );
-				$infoboxes = $this->getInfoboxes( $templateTextWithoutIncludeonly );
-
-				if ( $infoboxes ) {
-					foreach ( $infoboxes as $infobox ) {
-						try {
-							PortableInfoboxParserTagController::getInstance()->render( $infobox, $parser, $frame );
-						} catch (Exception $e) {
-							\Wikia\Logger\WikiaLogger::instance()->info( 'Invalid infobox syntax in includeonly tag' );
-						}
-					}
-					return $parser->getOutput()->getProperty( self::INFOBOXES_PROPERTY_NAME );
-				}
-			}
+	protected function clear() {
+		$id = $this->title->getArticleID();
+		if ( $id ) {
+			$this->propsProxy->set( $id, [ self::INFOBOXES_PROPERTY_NAME => '' ] );
+			// don't cache clear state
+			$this->purge();
 		}
-
-		//on empty parser cache this should be regenerated, see WikiPage.php:2996
-		$parserOutput = $article->getParserOutput();
-		$parsedInfoboxes = $parserOutput ?
-			$parserOutput->getProperty( self::INFOBOXES_PROPERTY_NAME )
-			: false;
-
-		return $parsedInfoboxes;
-	}
-
-	/**
-	 * @desc From the template without <includeonly> tags, creates an array of
-	 * strings containing only infoboxes. All template content which is not an infobox is removed.
-	 *
-	 * @param $text string Content of template which uses the <includeonly> tags
-	 * @return array of striped infoboxes ready to parse
-	 */
-	protected function getInfoboxes( $text ) {
-		preg_match_all( "/<infobox.+<\/infobox>/sU", $text, $result );
-
-		return $result[0];
-	}
-
-	/**
-	 * @desc returns the text from inside of the first <includeonly> tag and
-	 * without the nowiki and pre tags.
-	 * @param $text string template text
-	 * @return string
-	 */
-	protected function getIncludeonlyText( $text ) {
-		preg_match_all( "/<includeonly>(.+)<\/includeonly>/sU", $text, $result );
-
-		if ( !isset( $result[1][0] ) ) {
-			return null;
-		}
-
-		$result = $this->removeNowikiPre( $result[1][0] );
-		return $result;
-
-	}
-
-	/**
-	 * @desc for given template text returns it without text in <nowiki> and <pre> tags
-	 * @param $text string
-	 * @return string
-	 */
-	protected function removeNowikiPre( $text ) {
-		$text = preg_replace( "/<nowiki>.+<\/nowiki>/sU", '', $text );
-		$text = preg_replace( "/<pre>.+<\/pre>/sU", '', $text );
-
-		return $text;
 	}
 }

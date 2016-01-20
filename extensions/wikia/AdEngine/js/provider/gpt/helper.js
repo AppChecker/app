@@ -1,77 +1,49 @@
 /*global define, setTimeout, require*/
 /*jshint maxlen:125, camelcase:false, maxdepth:7*/
 define('ext.wikia.adEngine.provider.gpt.helper', [
-	'wikia.document',
 	'wikia.log',
-	'wikia.window',
 	'ext.wikia.adEngine.adContext',
 	'ext.wikia.adEngine.adLogicPageParams',
 	'ext.wikia.adEngine.provider.gpt.adDetect',
 	'ext.wikia.adEngine.provider.gpt.adElement',
 	'ext.wikia.adEngine.provider.gpt.googleTag',
+	'ext.wikia.adEngine.recovery.helper',
 	'ext.wikia.adEngine.slotTweaker',
-	require.optional('ext.wikia.adEngine.provider.gpt.sourcePointTag'),
 	require.optional('ext.wikia.adEngine.provider.gpt.sraHelper'),
 	require.optional('ext.wikia.adEngine.slot.scrollHandler')
 ], function (
-	doc,
 	log,
-	window,
 	adContext,
 	adLogicPageParams,
 	adDetect,
 	AdElement,
 	GoogleTag,
+	recoveryHelper,
 	slotTweaker,
-	SourcePointTag,
 	sraHelper,
 	scrollHandler
 ) {
 	'use strict';
 
 	var logGroup = 'ext.wikia.adEngine.provider.gpt.helper',
-		context = adContext.getContext(),
 		googleApi = new GoogleTag(),
-		slotsToRecover = [],
-		sourcePointInitialized = false;
-
-	function isRecoveryEnabled() {
-		return !!(context.opts.sourcePoint && SourcePointTag);
-	}
-
-	function isBlocking() {
-		return !!(isRecoveryEnabled() && window.ads && window.ads.runtime.sp.blocking);
-	}
-
-	function isRecoverable(slotName, recoverableSlots) {
-		return isRecoveryEnabled() && recoverableSlots.indexOf(slotName) !== -1;
-	}
-
-	function recoverSlots() {
-		if (!isBlocking()) {
-			return;
-		}
-		log(['Starting recovery', slotsToRecover], 'debug', logGroup);
-		while (slotsToRecover.length){
-			window.ads.runtime.sp.slots.push([slotsToRecover.shift()]);
-		}
-	}
+		recoveryInitialized = false;
 
 	function loadRecovery() {
-		if (sourcePointInitialized) {
+		if (recoveryInitialized) {
 			return;
 		}
 		log('SourcePoint recovery enabled', 'debug', logGroup);
-		sourcePointInitialized = true;
-		googleApi = new SourcePointTag();
-		recoverSlots();
+		recoveryInitialized = true;
+		googleApi = recoveryHelper.createSourcePointTag();
+		recoveryHelper.recoverSlots();
 	}
 
 	function loadSourcePoint() {
-		if (isBlocking()) {
+		if (recoveryHelper.isBlocking()) {
 			loadRecovery();
 		} else {
-			doc.addEventListener('sp.blocking', function () {
+			recoveryHelper.addOnBlockingCallback(function () {
 				loadRecovery();
 			});
 		}
@@ -94,7 +66,8 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 		var count,
 			element,
 			recoverableSlots = extra.recoverableSlots || [],
-			shouldPush = !isBlocking() || isRecoverable(slotName, recoverableSlots);
+			shouldPush = !recoveryHelper.isBlocking() ||
+				(recoveryHelper.isBlocking() && recoveryHelper.isRecoverable(slotName, recoverableSlots));
 
 		extra = extra || {};
 		slotTargeting = JSON.parse(JSON.stringify(slotTargeting)); // copy value
@@ -110,15 +83,22 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 
 		function callSuccess(adInfo) {
 			if (adInfo && adInfo.adType === 'collapse') {
-				slotTweaker.hide(element.getSlotName(), isBlocking());
+				slotTweaker.hide(
+					element.getSlotContainerId(),
+					recoveryHelper.isBlocking() && recoveryHelper.isRecoveryEnabled()
+				);
 			}
+
 			if (typeof extra.success === 'function') {
 				extra.success(adInfo);
 			}
 		}
 
 		function callError(adInfo) {
-			slotTweaker.hide(element.getId());
+			slotTweaker.hide(
+				element.getSlotContainerId(),
+				recoveryHelper.isBlocking() && recoveryHelper.isRecoveryEnabled()
+			);
 			if (typeof extra.error === 'function') {
 				adInfo = adInfo || {};
 				adInfo.method = 'hop';
@@ -149,7 +129,7 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 		}
 
 		if (!googleApi.isInitialized()) {
-			if (isRecoveryEnabled()) {
+			if (recoveryHelper.isRecoveryEnabled()) {
 				googleApi.init(loadSourcePoint);
 			} else {
 				googleApi.init();
@@ -159,11 +139,12 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 
 		if (!shouldPush) {
 			log(['Push blocked', slotName], 'debug', logGroup);
+			slotTweaker.removeDefaultHeight(slotName);
 			return;
 		}
 
-		if (!isBlocking()) {
-			slotsToRecover.push(slotName);
+		if (!recoveryHelper.isBlocking() && recoveryHelper.isRecoveryEnabled()) {
+			recoveryHelper.addSlotToRecover(slotName);
 		}
 
 		log(['pushAd', slotName], 'info', logGroup);

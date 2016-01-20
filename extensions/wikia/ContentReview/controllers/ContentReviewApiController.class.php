@@ -4,6 +4,7 @@ use Wikia\ContentReview\Models\CurrentRevisionModel;
 use Wikia\ContentReview\Models\ReviewModel;
 use Wikia\ContentReview\Models\ReviewLogModel;
 use Wikia\ContentReview\Helper;
+use Wikia\ContentReview\ContentReviewStatusesService;
 
 class ContentReviewApiController extends WikiaApiController {
 
@@ -49,6 +50,8 @@ class ContentReviewApiController extends WikiaApiController {
 		( new ReviewModel() )->submitPageForReview( $this->wg->CityId, $pageId,
 			$revisionId, $submitUserId );
 
+		ContentReviewStatusesService::purgeJsPagesCache();
+
 		$this->makeSuccessResponse();
 	}
 
@@ -62,20 +65,11 @@ class ContentReviewApiController extends WikiaApiController {
 	public function enableTestMode() {
 		$this->isValidPostRequest( $this->request, $this->wg->User );
 
-		$pageId = $this->request->getInt( 'pageId' );
-
-		$title = Title::newFromID( $pageId );
-		if ( $title === null || !$title->isJsPage() ) {
-			throw new NotFoundApiException( "JS page with ID {$pageId} does not exist");
+		if ( !$this->wg->User->isAllowed( 'content-review-test-mode' ) ) {
+			throw new PermissionsException( 'content-review-test-mode' );
 		}
 
-		$submitUserId = $this->wg->User->getId();
-		if ( !$submitUserId > 0 || !$this->canUserSubmit( $title )	) {
-			throw new PermissionsException( 'edit' );
-		}
-
-		$helper = new Helper();
-		$helper->setContentReviewTestMode( $this->wg->CityId );
+		$this->getHelper()->setContentReviewTestMode( $this->wg->CityId );
 		$this->makeSuccessResponse();
 	}
 
@@ -115,6 +109,8 @@ class ContentReviewApiController extends WikiaApiController {
 
 		$model = new ReviewModel();
 		$model->updateRevisionStatus( $wikiId, $pageId, $oldStatus, $status, $reviewerId );
+
+		ContentReviewStatusesService::purgeJsPagesCache();
 	}
 
 	/**
@@ -128,9 +124,9 @@ class ContentReviewApiController extends WikiaApiController {
 			throw new PermissionsException( 'content-review' );
 		}
 
-		$currentRevisionModel = new CurrentRevisionModel();
-		$reviewModel = new ReviewModel();
-		$helper = new Helper();
+		$currentRevisionModel = $this->getCurrentRevisionModel();
+		$helper = $this->getHelper();
+		$reviewModel = $this->getReviewModel();
 
 		$reviewerId = $this->wg->User->getId();
 		$pageId = $this->request->getInt( 'pageId' );
@@ -139,17 +135,15 @@ class ContentReviewApiController extends WikiaApiController {
 		$diff = $this->request->getInt( 'diff' );
 		$oldid = $this->request->getInt( 'oldid' );
 
-
-		if ( $helper->hasPageApprovedId( $currentRevisionModel, $wikiId, $pageId, $oldid  )
+		if ( $helper->hasPageApprovedId( $currentRevisionModel, $wikiId, $pageId, $oldid )
 			&& $helper->isDiffPageInReviewProcess( $this->request, $reviewModel, $wikiId, $pageId, $diff ) )
 		{
-			$review = $reviewModel->getReviewedContent( $wikiId, $pageId, ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW );
+			$review = $reviewModel->getReviewOfPageByStatus( $wikiId, $pageId, ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW );
 
 			if ( empty( $review ) ) {
-				throw new NotFoundApiException( 'Requested data not present in the database.' );
+				throw new NotFoundApiException( 'There is no revision that is currently in review.' );
 			}
-			$reviewLogModel = new ReviewLogModel();
-			$reviewLogModel->backupCompletedReview( $review, $status, $reviewerId );
+			$this->getReviewLogModel()->backupCompletedReview( $review, $status, $reviewerId );
 
 			if ( $status === ReviewModel::CONTENT_REVIEW_STATUS_APPROVED ) {
 				$currentRevisionModel->approveRevision( $wikiId, $pageId, $review['revision_id'] );
@@ -157,31 +151,17 @@ class ContentReviewApiController extends WikiaApiController {
 				$this->notification = wfMessage( 'content-review-diff-approve-confirmation' )->parse();
 			} elseif ( $status === ReviewModel::CONTENT_REVIEW_STATUS_REJECTED ) {
 				$title = Title::newFromID( $pageId );
-				$feedbackLink = $helper->prepareProvideFeedbackLink( $title );
+				$feedbackLink = $helper->prepareProvideFeedbackLink( $title, $diff );
 				$this->notification = wfMessage( 'content-review-diff-reject-confirmation', $feedbackLink )->parse();
 			}
 
 			$reviewModel->updateCompletedReview( $wikiId, $pageId, $review['revision_id'], $status );
+
+			ContentReviewStatusesService::purgeJsPagesCache();
 		}
 		else {
 			$this->notification = wfMessage( 'content-review-diff-already-done' )->escaped();
 		}
-	}
-
-	public function getPageStatus() {
-		$wikiId = $this->request->getInt( 'wikiId' );
-		$pageId = $this->request->getInt( 'pageId' );
-
-		$liveRevisionData = [
-			'liveId' => $this->getLatestReviewedRevisionFromDB( $wikiId, $pageId )['revision_id'],
-		];
-
-		$reviewModel = new ReviewModel();
-		$reviewData = $reviewModel->getPageStatus( $wikiId, $pageId );
-
-		$currentPageData = array_merge( $liveRevisionData, $reviewData );
-
-		$this->makeSuccessResponse( $currentPageData );
 	}
 
 	public function getLatestReviewedRevision() {
@@ -214,24 +194,13 @@ class ContentReviewApiController extends WikiaApiController {
 		/* Override global title to provide context */
 		$this->wg->Title = Title::newFromText( $pageName );
 
-		/* Get page status */
-		$pageStatus = \F::app()->sendRequest(
-			'ContentReviewApiController',
-			'getPageStatus',
+		/* Render status module */
+		$res = $this->app->sendRequest(
+			'ContentReviewModule',
+			'Render',
 			[
 				'wikiId' => $this->wg->CityId,
 				'pageId' => $this->wg->Title->getArticleID(),
-			],
-			true
-		)->getData();
-
-		/* Render status module */
-		$res = \F::app()->sendRequest(
-			'ContentReviewModule',
-			'executeRender',
-			[
-				'pageStatus' => $pageStatus,
-				'latestRevisionId' => $this->wg->Title->getLatestRevID(),
 			],
 			true
 		)->getData();
@@ -246,8 +215,41 @@ class ContentReviewApiController extends WikiaApiController {
 		$this->setResponseData( $res );
 	}
 
+	/**
+	 * @param $pageName
+	 * @return Title
+	 * @throws MWException
+	 */
 	protected function getTitle( $pageName ) {
 		return Title::newFromText( $pageName );
+	}
+
+	/**
+	 * @return Wikia\ContentReview\Helper
+	 */
+	protected function getHelper() {
+		return new Helper();
+	}
+
+	/**
+	 * @return Wikia\ContentReview\Models\CurrentRevisionModel
+	 */
+	protected function getCurrentRevisionModel() {
+		return new CurrentRevisionModel();
+	}
+
+	/**
+	 * @return Wikia\ContentReview\Models\ReviewModel
+	 */
+	protected function getReviewModel() {
+		return new ReviewModel();
+	}
+
+	/**
+	 * @return Wikia\ContentReview\Models\ReviewLogModel
+	 */
+	protected function getReviewLogModel() {
+		return new ReviewLogModel();
 	}
 
 	private function isValidPostRequest( WikiaRequest $request, User $user ) {

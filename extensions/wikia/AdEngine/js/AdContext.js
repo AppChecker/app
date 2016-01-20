@@ -1,15 +1,16 @@
-/*global define,require*/
+/*global define*/
 /**
  * The AMD module to hold all the context needed for the client-side scripts to run.
  */
 define('ext.wikia.adEngine.adContext', [
-	'wikia.window',
+	'wikia.abTest',
+	'wikia.cookies',
 	'wikia.document',
 	'wikia.geo',
 	'wikia.instantGlobals',
-	'wikia.querystring',
-	require.optional('wikia.abTest')
-], function (w, doc, geo, instantGlobals, Querystring, abTest) {
+	'wikia.window',
+	'wikia.querystring'
+], function (abTest, cookies, doc, geo, instantGlobals, w, Querystring) {
 	'use strict';
 
 	instantGlobals = instantGlobals || {};
@@ -23,31 +24,11 @@ define('ext.wikia.adEngine.adContext', [
 	}
 
 	function getMercuryCategories() {
-		var categoryDict;
-
-		try {
-			categoryDict = w.Wikia.article.article.categories;
-		} catch (e) {
+		if (!context.targeting.mercuryPageCategories) {
 			return;
 		}
 
-		return categoryDict.map(function (item) { return item.title; });
-	}
-
-	function isProperCountry(countryList) {
-		return !!(countryList && countryList.indexOf && countryList.indexOf(geo.getCountryCode()) > -1);
-	}
-
-	function isProperRegion(countryList) {
-		return !!(
-			countryList &&
-			countryList.indexOf &&
-			countryList.indexOf(geo.getCountryCode() + '-' + geo.getRegionCode()) > -1
-		);
-	}
-
-	function isProperGeo(countryList) {
-		return isProperCountry(countryList) || isProperRegion(countryList);
+		return context.targeting.mercuryPageCategories.map(function (item) { return item.title; });
 	}
 
 	function isUrlParamSet(param) {
@@ -56,7 +37,8 @@ define('ext.wikia.adEngine.adContext', [
 
 	function setContext(newContext) {
 		var i,
-			len;
+			len,
+			noExternals = w.wgNoExternals || isUrlParamSet('noexternals');
 
 		// Note: consider copying the value, not the reference
 		context = newContext;
@@ -73,20 +55,36 @@ define('ext.wikia.adEngine.adContext', [
 			context.opts.showAds = false;
 		}
 
-		// SourcePoint integration
-		if (context.opts.sourcePointUrl) {
-			context.opts.sourcePoint = isUrlParamSet('sourcepoint') ||
-				isProperGeo(instantGlobals.wgAdDriverSourcePointCountries);
-		}
-
 		// SourcePoint detection integration
-		if (context.opts.sourcePointDetectionUrl) {
+		if (!noExternals && context.opts.sourcePointDetectionUrl) {
 			context.opts.sourcePointDetection = isUrlParamSet('sourcepointdetection') ||
-				isProperCountry(instantGlobals.wgAdDriverSourcePointDetectionCountries);
+				(context.targeting.skin === 'oasis' &&
+				geo.isProperGeo(instantGlobals.wgAdDriverSourcePointDetectionCountries));
+			context.opts.sourcePointDetectionMobile = isUrlParamSet('sourcepointdetection') ||
+				(context.targeting.skin === 'mercury' &&
+				geo.isProperGeo(instantGlobals.wgAdDriverSourcePointDetectionMobileCountries));
 		}
 
-		// Showcase.*
-		if (isUrlParamSet('showcase')) {
+		// SourcePoint recovery integration
+		if (context.opts.sourcePointDetection && context.opts.sourcePointRecoveryUrl) {
+			context.opts.sourcePointRecovery = isUrlParamSet('sourcepointrecovery') ||
+				geo.isProperGeo(instantGlobals.wgAdDriverSourcePointRecoveryCountries);
+		}
+
+		// Recoverable ads message
+		if (context.opts.sourcePointDetection && !context.opts.sourcePointRecovery && context.opts.showAds) {
+			context.opts.recoveredAdsMessage = context.targeting.pageType === 'article' &&
+				geo.isProperGeo(instantGlobals.wgAdDriverAdsRecoveryMessageCountries);
+		}
+
+		// Google Consumer Surveys
+		if (context.opts.sourcePointDetection && !context.opts.sourcePointRecovery && context.opts.showAds) {
+			context.opts.googleConsumerSurveys = abTest.getGroup('PROJECT_43') === 'GROUP_5' &&
+				geo.isProperGeo(instantGlobals.wgAdDriverGoogleConsumerSurveysCountries);
+		}
+
+		// showcase.*
+		if (cookies.get('mock-ads') === 'NlfdjR5xC0') {
 			context.opts.showcase = true;
 		}
 
@@ -95,40 +93,40 @@ define('ext.wikia.adEngine.adContext', [
 			context.targeting.pageCategories = w.wgCategories || getMercuryCategories();
 		}
 
-		// Taboola integration
-		if (context.providers.taboola) {
-			context.providers.taboola = abTest && abTest.inGroup('NATIVE_ADS_TABOOLA', 'YES') &&
-				(context.targeting.pageType === 'article' || context.targeting.pageType === 'home');
+		// Evolve2 integration
+		if (context.providers.evolve2) {
+			context.providers.evolve2 = geo.isProperGeo(instantGlobals.wgAdDriverEvolve2Countries);
 		}
 
-		if (isProperCountry(instantGlobals.wgAdDriverTurtleCountries)) {
+		if (geo.isProperGeo(instantGlobals.wgAdDriverTurtleCountries)) {
 			context.providers.turtle = true;
 		}
 
-		if (isProperCountry(instantGlobals.wgAdDriverOpenXCountries)) {
+		if (geo.isProperGeo(instantGlobals.wgAdDriverOpenXCountries)) {
 			context.providers.openX = true;
 		}
 
 		// INVISIBLE_HIGH_IMPACT slot
 		context.slots.invisibleHighImpact = (
 			context.slots.invisibleHighImpact &&
-			isProperCountry(instantGlobals.wgAdDriverHighImpactSlotCountries)
+			geo.isProperGeo(instantGlobals.wgAdDriverHighImpactSlotCountries)
 		) || isUrlParamSet('highimpactslot');
 
 		// INCONTENT_PLAYER slot
-		context.slots.incontentPlayer = isProperCountry(instantGlobals.wgAdDriverIncontentPlayerSlotCountries) ||
+		context.slots.incontentPlayer = geo.isProperGeo(instantGlobals.wgAdDriverIncontentPlayerSlotCountries) ||
 			isUrlParamSet('incontentplayer');
 
 		context.opts.scrollHandlerConfig = instantGlobals.wgAdDriverScrollHandlerConfig;
-		context.opts.enableScrollHandler = isProperCountry(instantGlobals.wgAdDriverScrollHandlerCountries) ||
+		context.opts.enableScrollHandler = geo.isProperGeo(instantGlobals.wgAdDriverScrollHandlerCountries) ||
 			isUrlParamSet('scrollhandler');
 
 		// Krux integration
 		context.targeting.enableKruxTargeting = !!(
 			context.targeting.enableKruxTargeting &&
-			isProperCountry(instantGlobals.wgAdDriverKruxCountries) &&
+			geo.isProperGeo(instantGlobals.wgAdDriverKruxCountries) &&
 			!instantGlobals.wgSitewideDisableKrux &&
-			!context.targeting.wikiDirectedAtChildren
+			!context.targeting.wikiDirectedAtChildren &&
+			!noExternals
 		);
 
 		// Export the context back to ads.context

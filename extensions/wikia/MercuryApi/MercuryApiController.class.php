@@ -174,8 +174,12 @@ class MercuryApiController extends WikiaController {
 	 *
 	 * @return array
 	 */
-	private function getNavigationData() {
-		return $this->sendRequest( 'NavigationApi', 'getData' )->getData();
+	private function getNavigation() {
+		$navData = $this->sendRequest( 'NavigationApi', 'getData' )->getData();
+		if ( isset( $navData['navigation']['wiki'] ) ) {
+			return $navData['navigation']['wiki'];
+		}
+		return [ ];
 	}
 
 	/**
@@ -273,18 +277,14 @@ class MercuryApiController extends WikiaController {
 
 		$wikiVariables = $this->mercuryApi->getWikiVariables();
 
-		try {
-			$wikiVariables['navData'] = $this->getNavigationData();
-		} catch ( Exception $e ) {
+		$navigation = $this->getNavigation();
+		if ( empty( $navData ) ) {
 			\Wikia\Logger\WikiaLogger::instance()->error(
-				'Fallback to empty navigation',
-				[
-					'exception' => $e
-				]
+				'Fallback to empty navigation'
 			);
-			$wikiVariables['navData'] = [ ];
 		}
 
+		$wikiVariables['navigation'] = $navigation;
 		$wikiVariables['vertical'] = WikiFactoryHub::getInstance()->getWikiVertical( $this->wg->CityId )['short'];
 		$wikiVariables['basePath'] = $this->wg->Server;
 
@@ -309,6 +309,15 @@ class MercuryApiController extends WikiaController {
 			$wikiVariables['image'] = $wikiImages[$this->wg->CityId];
 		}
 
+		$wikiVariables['specialRobotPolicy'] = null;
+		$robotPolicy = Wikia::getEnvironmentRobotPolicy( $this->getContext()->getRequest() );
+		if ( !empty( $robotPolicy ) ) {
+			$wikiVariables['specialRobotPolicy'] = $robotPolicy;
+		}
+
+		// template for non-main pages (use $1 for article name)
+		$wikiVariables['htmlTitleTemplate'] = ( new WikiaHtmlTitle() )->setParts( ['$1'] )->getTitle();
+
 		$this->response->setVal( 'data', $wikiVariables );
 		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
 
@@ -332,16 +341,18 @@ class MercuryApiController extends WikiaController {
 			$article = Article::newFromID( $articleId );
 
 			if ( $title->isRedirect() ) {
-				/* @var Title $title */
-				$title = $article->getRedirectTarget();
-				$article = Article::newFromID( $title->getArticleID() );
+				/* @var Title|null $redirectTargetTitle */
+				$redirectTargetTitle = $article->getRedirectTarget();
 				$data['redirected'] = true;
+				if ( $redirectTargetTitle instanceof Title && !empty( $redirectTargetTitle->getArticleID() ) ) {
+					$article = Article::newFromID( $redirectTargetTitle->getArticleID() );
+					$title = $redirectTargetTitle;
+				} else {
+					$data['redirectEmptyTarget'] = true;
+				}
 			}
 
-			//CONCF-855: $article is null sometimes, fix added
-			//I add logging as well to be sure that this not happen anymore
-			//TODO: Remove after 2 weeks: CONCF-1012
-			if ( !$article instanceof Article) {
+			if ( !$article instanceof Article ) {
 				\Wikia\Logger\WikiaLogger::instance()->error(
 					'$article should be an instance of an Article',
 					[
@@ -351,28 +362,40 @@ class MercuryApiController extends WikiaController {
 					]
 				);
 
-				throw new NotFoundApiException('Article is empty');
+				throw new NotFoundApiException( 'Article is empty' );
 			}
 
 			$data['details'] = $this->getArticleDetails( $article );
-			$data['topContributors'] = $this->getTopContributorsDetails(
-				$this->getTopContributorsPerArticle( $articleId )
-			);
+
 			$isMainPage = $title->isMainPage();
 			$data['isMainPage'] = $isMainPage;
+
+			$titleBuilder = new WikiaHtmlTitle();
 
 			if ( $isMainPage && !empty( $wgEnableMainPageDataMercuryApi ) && !empty( $wgWikiaCuratedContent ) ) {
 				$data['mainPageData'] = $this->getMainPageData();
 			} else {
 				$articleAsJson = $this->getArticleJson( $articleId, $title, $sections );
 				$data['article'] = $articleAsJson;
+				$data['topContributors'] = $this->getTopContributorsDetails(
+					$this->getTopContributorsPerArticle( $articleId )
+				);
+				$relatedPages = $this->getRelatedPages( $articleId );
+
+				if ( !empty( $relatedPages ) ) {
+					$data['relatedPages'] = $relatedPages;
+				}
+				if ( !$isMainPage ) {
+					$titleBuilder->setParts( [ $articleAsJson['displayTitle'] ] );
+				}
+			}
+			$data['htmlTitle'] = $titleBuilder->getTitle();
+
+			$otherLanguages = $this->getOtherLanguages( $title );
+			if ( !empty( $otherLanguages ) ) {
+				$data['otherLanguages'] = $otherLanguages;
 			}
 
-			$relatedPages = $this->getRelatedPages( $articleId );
-
-			if ( !empty( $relatedPages ) ) {
-				$data['relatedPages'] = $relatedPages;
-			}
 		} catch ( WikiaHttpException $exception ) {
 			$this->response->setCode( $exception->getCode() );
 
@@ -456,7 +479,21 @@ class MercuryApiController extends WikiaController {
 			throw new NotFoundApiException( 'No members' );
 		}
 
-		$this->response->setVal( 'items', $data[ 'items' ] );
+		$this->response->setVal( 'items', $data['items'] );
+	}
+
+	public function getMainPageDetailsAndAdsContext() {
+		$mainPageTitle = Title::newMainPage();
+		$mainPageArticleID = $mainPageTitle->getArticleID();
+		$article = Article::newFromID( $mainPageArticleID );
+		$data = [ ];
+
+		$data['details'] = $this->getArticleDetails( $article );
+		$data['adsContext'] = $this->mercuryApi->getAdsContext( $mainPageTitle );
+
+		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
+		$this->response->setCacheValidity( WikiaResponse::CACHE_STANDARD );
+		$this->response->setVal( 'data', $data );
 	}
 
 	public static function curatedContentDataMemcKey( $section = null ) {
@@ -533,5 +570,46 @@ class MercuryApiController extends WikiaController {
 		$wikiDetails = $service->getWikiDetails( $wgCityId );
 
 		return $wikiDetails['stats'];
+	}
+
+	private function getOtherLanguages( Title $title ) {
+		global $wgEnableLillyExt;
+
+		if ( empty( $wgEnableLillyExt ) ) {
+			return null;
+		}
+
+		$url = $title->getFullURL();
+		//$url = str_replace( '.rychu.wikia-dev.com', '.wikia.com', $url );
+
+		$lilly = new Lilly();
+		$links = $lilly->getCluster( $url );
+		if ( !count( $links ) ) {
+			return null;
+		}
+
+		// Remove link to self
+		$langCode = $title->getPageLanguage()->getCode();
+		unset( $links[$langCode] );
+
+		// Construct the structure for Mercury
+		$langMap = array_map( function ( $langCode, $url ) {
+			$urlPath = parse_url( $url, PHP_URL_PATH );
+			$articleTitle = preg_replace( '|^/(wiki/)?|', '', rawurldecode( $urlPath ) );
+			return [
+				'languageCode' => $langCode,
+				'languageName' => Language::getLanguageName( $langCode ),
+				'articleTitle' => str_replace( '_', ' ', $articleTitle ),
+				'url' => $url,
+			];
+		}, array_keys( $links ), array_values( $links ) );
+
+		// Sort by localized language name
+		$c = Collator::create( 'en_US.UTF-8' );
+		usort( $langMap, function ( $lang1, $lang2 ) use ( $c ) {
+			return $c->compare( $lang1['languageName'], $lang2['languageName'] );
+		} );
+
+		return $langMap;
 	}
 }

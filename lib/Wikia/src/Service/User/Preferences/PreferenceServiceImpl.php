@@ -8,17 +8,16 @@ use Wikia\Domain\User\Preferences\UserPreferences;
 use Wikia\Logger\Loggable;
 use Wikia\Persistence\User\Preferences\PreferencePersistence;
 use Wikia\Util\WikiaProfiler;
+use Wikia\Service\PersistenceException;
 
 class PreferenceServiceImpl implements PreferenceService {
 
-	use WikiaProfiler;
 	use Loggable;
 
 	const CACHE_PROVIDER = "user_preferences_cache_provider";
 	const HIDDEN_PREFS = "user_preferences_hidden_prefs";
 	const DEFAULT_PREFERENCES = "user_preferences_default_prefs";
 	const FORCE_SAVE_PREFERENCES = "user_preferences_force_save_prefs";
-	const PROFILE_EVENT = \Transaction::EVENT_USER_PREFERENCES;
 
 	/** @var CacheProvider */
 	private $cache;
@@ -129,6 +128,38 @@ class PreferenceServiceImpl implements PreferenceService {
 		$this->load( $userId )->deleteLocalPreference( $name, $wikiId );
 	}
 
+	public function deleteAllPreferences( $userId ) {
+		// if the preferences are marked as read-only DO NOT allow
+		// purging. this is to ensure we don't make a mistake after a failed read
+		if ( $this->load( $userId )->isReadOnly() ) {
+			return false;
+		}
+
+		try {
+			$deleted = $this->persistence->deleteAll( $userId );
+			if ( $deleted ) {
+				$this->deleteFromCache( $userId );
+				unset( $this->preferences[$userId] );
+			}
+
+			return $deleted;
+		} catch (\Exception $e) {
+			$this->error( $e->getMessage(), ['user' => $userId] );
+			throw $e;
+		}
+	}
+
+	public function findWikisWithLocalPreferenceValue( $preferenceName, $value ) {
+		try {
+			return $this->persistence->findWikisWithLocalPreferenceValue( $preferenceName, $value );
+		} catch (\Exception $e) {
+			$this->error( $e->getMessage(), [
+				'preferenceName' => $preferenceName,
+				'value' => $value, ] );
+			throw $e;
+		}
+	}
+
 	/**
 	 * @param string $userId
 	 * @return bool
@@ -140,6 +171,12 @@ class PreferenceServiceImpl implements PreferenceService {
 		}
 
 		$prefs = $this->load( $userId );
+
+		// if the UserPreferences have been marked as read-only they should NOT be saved
+		if ( $prefs->isReadOnly() ) {
+			return false;
+		}
+
 		$prefsToSave = new UserPreferences();
 
 		foreach ( $prefs->getGlobalPreferences() as $pref ) {
@@ -151,7 +188,7 @@ class PreferenceServiceImpl implements PreferenceService {
 		foreach ( $prefs->getLocalPreferences() as $wikiId => $wikiPreferences ) {
 			foreach ( $wikiPreferences as $pref ) {
 				/** @var $pref LocalPreference */
-				if ( $this->prefIsSaveable( $pref->getName(), $pref->getValue(), $this->getLocalDefault( $pref->getName() ) ) ) {
+				if ( $this->prefIsSaveable( $pref->getName(), $pref->getValue(), $this->getLocalDefault( $pref->getName(), $wikiId ) ) ) {
 					$prefsToSave->setLocalPreference( $pref->getName(), $pref->getWikiId(), $pref->getValue() );
 				}
 			}
@@ -159,14 +196,7 @@ class PreferenceServiceImpl implements PreferenceService {
 
 		if ( !$prefsToSave->isEmpty() ) {
 			try {
-				$profilerStart = $this->startProfile();
 				$result = $this->persistence->save( $userId, $prefsToSave );
-				$this->endProfile(
-					self::PROFILE_EVENT,
-					$profilerStart,
-					[
-						'user_id' => $userId,
-						'method' => 'setPreferences', ] );
 				$this->saveToCache( $userId, $prefsToSave );
 
 				return $result;
@@ -187,6 +217,10 @@ class PreferenceServiceImpl implements PreferenceService {
 		return $this->defaultPreferences->getLocalPreference( $pref, $wikiId );
 	}
 
+	public function deleteFromCache( $userId ) {
+		return $this->cache->delete( $userId );
+	}
+
 	protected function getLoggerContext() {
 		return ['class' => 'PreferenceService'];
 	}
@@ -198,7 +232,7 @@ class PreferenceServiceImpl implements PreferenceService {
 	 */
 	private function load( $userId ) {
 		if ( $userId == 0 ) {
-			return new UserPreferences();
+			return $this->applyDefaults( new UserPreferences() );
 		}
 
 		if ( !isset( $this->preferences[$userId] ) ) {
@@ -206,14 +240,12 @@ class PreferenceServiceImpl implements PreferenceService {
 
 			if ( !$preferences ) {
 				try {
-					$profilerStart = $this->startProfile();
 					$preferences = $this->persistence->get( $userId );
-					$this->endProfile(
-						self::PROFILE_EVENT,
-						$profilerStart,
-						[
-							'user_id' => $userId,
-							'method' => 'getPreferences', ] );
+				} catch ( PersistenceException $e ) {
+					$this->error( $e->getMessage() . ": setting preferences in read-only mode",
+						['user' => $userId] );
+					$preferences = ( new UserPreferences() )
+						->setReadOnly( true );
 				} catch ( \Exception $e ) {
 					$this->error( $e->getMessage(), ['user' => $userId] );
 					throw $e;
@@ -232,10 +264,6 @@ class PreferenceServiceImpl implements PreferenceService {
 
 	private function saveToCache( $userId, UserPreferences $preferences ) {
 		return $this->cache->save( $userId, $preferences );
-	}
-
-	private function deleteFromCache( $userId ) {
-		return $this->cache->delete( $userId );
 	}
 
 	private function applyDefaults( UserPreferences $preferences ) {
@@ -258,11 +286,7 @@ class PreferenceServiceImpl implements PreferenceService {
 	}
 
 	private function prefIsSaveable( $pref, $value, $valueFromDefaults ) {
-		if ( $value == $valueFromDefaults ) {
-			return false;
-		}
-
 		return in_array( $pref, $this->forceSavePrefs ) || $value != $valueFromDefaults ||
-			( $valueFromDefaults != null && $value !== false && $value !== null );
+			( $valueFromDefaults === null && $value !== false && $value !== null );
 	}
 }

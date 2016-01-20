@@ -60,6 +60,18 @@ class HeliosClientImpl implements HeliosClient
 		// Request URI pre-processing.
 		$uri = "{$this->baseUri}{$resourceName}?" . http_build_query($getParams);
 
+		// Appending the request remote IP for client to be able to
+		// identify the source of the remote request.
+		if ( isset( $extraRequestOptions['headers'] ) ) {
+			$headers = $extraRequestOptions['headers'];
+			unset( $extraRequestOptions['headers'] );
+		} else {
+			$headers = [];
+		}
+
+		global $wgRequest;
+		$headers['X-Forwarded-For'] = $wgRequest->getIP();
+
 		// Request options pre-processing.
 		$options = [
 			'method'          => 'GET',
@@ -69,6 +81,7 @@ class HeliosClientImpl implements HeliosClient
 			'followRedirects' => false,
 			'returnInstance'  => true,
 			'internalRequest' => true,
+			'headers'         => $headers,
 		];
 
 		$options = array_merge( $options, $extraRequestOptions );
@@ -91,7 +104,7 @@ class HeliosClientImpl implements HeliosClient
 			return \Http::request( $options['method'], $uri, $options );
 		} );
 
-		$this->status = $request->status;
+		$this->status = $request->getStatus();
 		return $this->processResponseOutput( $request );
 	}
 
@@ -100,10 +113,14 @@ class HeliosClientImpl implements HeliosClient
 			return null;
 		}
 
-		$output = json_decode( $request->getContent() );
+		$response = $request->getContent();
+		$output = json_decode( $response );
 
 		if ( !$output ) {
-			throw new ClientException ( 'Invalid response.' );
+			$data = [];
+			$data[ "response" ] = $response;
+			$data["status_code"] = $request->getStatus();
+			throw new ClientException ( 'Invalid Helios response.', 0, null, $data );
 		}
 
 		return $output;
@@ -132,7 +149,7 @@ class HeliosClientImpl implements HeliosClient
 			[ 'method'	=> 'POST' ]
 		);
 
-		return $response;
+		return [$this->status, $response];
 	}
 
 	/**
@@ -142,20 +159,9 @@ class HeliosClientImpl implements HeliosClient
 	{
 		return $this->request(
 			'info',
-			[ 'code' => $token ]
-		);
-	}
-
-	/**
-	 * A shortcut method for refresh token requests.
-	 */
-	public function refreshToken( $token )
-	{
-		return $this->request(
-			'token',
 			[
-				'grant_type'	=> 'refresh_token',
-				'refresh_token'	=> $token
+				'code' => $token,
+				'noblockcheck' => 1,
 			]
 		);
 	}
@@ -176,6 +182,24 @@ class HeliosClientImpl implements HeliosClient
 			[],
 			[ 'method' => 'DELETE',
 				'headers' => array( Constants::HELIOS_AUTH_HEADER => $userId ) ]
+		);
+	}
+
+	/**
+	 * Generate a token for a user.
+	 * Warning: Assumes the user is already authenticated.
+	 *
+	 * @param $userId integer - the current user id
+	 *
+	 * @return array - JSON string deserialized into an associative array
+	 */
+	public function generateToken( $userId )
+	{
+		return $this->request(
+			sprintf('users/%s/tokens', $userId),
+			[],
+			[],
+			[ 'method' => 'POST' ]
 		);
 	}
 

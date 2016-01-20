@@ -14,7 +14,6 @@ class ArticleAsJson extends WikiaService {
 	const MEDIA_CONTEXT_ARTICLE_VIDEO = 'article-video';
 	const MEDIA_CONTEXT_GALLERY_IMAGE = 'gallery-image';
 	const MEDIA_CONTEXT_ICON = 'icon';
-	const MEDIA_CONTEXT_INFOBOX = 'infobox';
 
 	private static function createMarker( $width = 0, $height = 0, $isGallery = false ){
 		$blankImgUrl = '//:0';
@@ -134,13 +133,14 @@ class ArticleAsJson extends WikiaService {
 		return true;
 	}
 
-	public static function onPortableInfoboxNodeImageGetData( $title, &$ref, $caption ) {
-
+	public static function onExtendPortableInfoboxImageData( $data, &$ref ) {
 		wfProfileIn( __METHOD__ );
+
+		$title = Title::newFromText( $data['name'] );
 		if ( $title ) {
 			$details = WikiaFileHelper::getMediaDetail( $title, self::$mediaDetailConfig );
-			$details['context'] = self::MEDIA_CONTEXT_INFOBOX;
-			self::$media[] = self::createMediaObject( $details, $title->getText(), $caption );
+			$details['context'] = $data['context'];
+			self::$media[] = self::createMediaObject( $details, $title->getText(), $data['caption'] );
 			$ref = count( self::$media ) - 1;
 		}
 
@@ -303,8 +303,10 @@ class ArticleAsJson extends WikiaService {
 		$smallFixedHeight = self::isIconSize( $handlerParams['height'] );
 		$smallWidth = self::isIconSize( $details['width'] );
 		$smallHeight = self::isIconSize( $details['height'] );
+		$templateType = isset ( $handlerParams['template-type'] ) ? $handlerParams['template-type'] : '';
+		$isInfoIcon = self::isInfoIcon( $templateType );
 
-		return $smallFixedWidth || $smallFixedHeight || $smallWidth || $smallHeight;
+		return $smallFixedWidth || $smallFixedHeight || $smallWidth || $smallHeight || $isInfoIcon;
 	}
 
 	/**
@@ -315,5 +317,9 @@ class ArticleAsJson extends WikiaService {
 	 */
 	private static function isIconSize( $sizeParam ) {
 		return isset( $sizeParam ) ? $sizeParam <= self::ICON_MAX_SIZE : false;
+	}
+
+	private static function isInfoIcon( $templateType ) {
+		return $templateType == TemplateClassificationService::TEMPLATE_INFOICON;
 	}
 }

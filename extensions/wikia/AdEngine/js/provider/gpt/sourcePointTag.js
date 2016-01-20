@@ -4,7 +4,7 @@ define('ext.wikia.adEngine.provider.gpt.sourcePointTag', [
 	'ext.wikia.adEngine.adContext',
 	'ext.wikia.adEngine.provider.gpt.googleTag',
 	'ext.wikia.adEngine.slot.adSlot',
-	'ext.wikia.adEngine.sourcePoint',
+	'ext.wikia.adEngine.sourcePointDetection',
 	'wikia.document',
 	'wikia.log',
 	'wikia.window'
@@ -28,7 +28,7 @@ define('ext.wikia.adEngine.provider.gpt.sourcePointTag', [
 
 		gads.async = true;
 		gads.type = 'text/javascript';
-		gads.src = context.opts.sourcePointUrl;
+		gads.src = context.opts.sourcePointRecoveryUrl;
 		gads.setAttribute('data-client-id', sourcePoint.getClientId());
 
 		gads.addEventListener('load', function () {
@@ -66,6 +66,7 @@ define('ext.wikia.adEngine.provider.gpt.sourcePointTag', [
 			}
 
 			if (slotName !== newSlotName) {
+				element.setSlotContainerId(slotElementId);
 				iframe = doc.getElementById(slotElementId).querySelector('div[id*="_container_"] iframe');
 				iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
 

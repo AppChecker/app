@@ -9,4 +9,7 @@ $messages = array_merge( $messages, array(
 'addnewtalksection-link' => 'Inizia una nuova sezione',
 
 'tog-enableuserjs' => 'Abilita il tuo JavaScript ([[Help:Personal_CSS_and_JS#JavaScript|Per saperne di più]])',
+
+'group-content-moderator' => 'Moderatori di contenuti',
+'group-content-moderator-member' => 'Moderatore di contenuti',
 ) );

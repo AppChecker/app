@@ -14,20 +14,22 @@ use Wikia\ContentReview\Models\ReviewModel,
 
 class ContentReviewService extends \WikiaService {
 
+	use \Wikia\Logger\Loggable;
+
 	/**
 	 * This is a shortcut method for the users entitled to be reviewers. Instead of submitting a revision
 	 * and manually approving it they are able to do so automatically.
-	 * zoma
+	 *
 	 * @param \User $user
 	 * @param int $wikiId
 	 * @param int $pageId
 	 * @param int $revisionId
-	 * @throws PermissionsException
+	 * @throws \PermissionsException
 	 * @throws \FluentSql\Exception\SqlException
 	 */
 	public function automaticallyApproveRevision( \User $user, $wikiId, $pageId, $revisionId ) {
 		if ( !$user->isAllowed( 'content-review' ) ) {
-			throw new PermissionsException( 'content-review' );
+			throw new \PermissionsException( 'content-review' );
 		}
 
 		$submitUserId = $user->getId();
@@ -40,6 +42,7 @@ class ContentReviewService extends \WikiaService {
 		$currentRevisionModel->approveRevision( $wikiId, $pageId, $revisionId );
 
 		( new Helper() )->purgeReviewedJsPagesTimestamp();
+		ContentReviewStatusesService::purgeJsPagesCache();
 
 		$reviewLogModel = new ReviewLogModel();
 		$now = ( new \DateTime() )->format( 'Y-m-d H:i:s' );
@@ -52,5 +55,32 @@ class ContentReviewService extends \WikiaService {
 			'review_start' => $now,
 		];
 		$reviewLogModel->backupCompletedReview( $logData, ReviewModel::CONTENT_REVIEW_STATUS_AUTOAPPROVED, $submitUserId );
+	}
+
+	/**
+	 * Removes all data on a given page from the Content Review database.
+	 * USE ONLY FOR DELETED PAGES!
+	 *
+	 * @param $wikiId
+	 * @param $pageId
+	 */
+	public function deletePageData( $wikiId, $pageId ) {
+		$reviewModel = new ReviewModel();
+		$currentRevisionModel = new CurrentRevisionModel();
+
+		if ( !$reviewModel->deleteReviewsOfPage( $wikiId, $pageId ) ) {
+			$this->error( 'ContentReview deletion failed', [
+				'targetTable' => $reviewModel::CONTENT_REVIEW_STATUS_TABLE,
+				'wikiId' => $wikiId,
+				'pageId' => $pageId,
+			] );
+		}
+		if ( !$currentRevisionModel->deleteCurrentRevisionOfPage( $wikiId, $pageId ) ) {
+			$this->error( 'ContentReview deletion failed', [
+				'targetTable' => $currentRevisionModel::CONTENT_REVIEW_CURRENT_REVISIONS_TABLE,
+				'wikiId' => $wikiId,
+				'pageId' => $pageId,
+			] );
+		}
 	}
 }

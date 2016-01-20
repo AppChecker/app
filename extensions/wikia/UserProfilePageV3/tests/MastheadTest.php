@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * @group Avatar
+ */
 class MastheadTest extends WikiaBaseTest {
 
 	/**
@@ -48,7 +51,7 @@ class MastheadTest extends WikiaBaseTest {
 			// one of the default avatars
 			[
 				'avatarOption' => 'Avatar2.jpg',
-				'expectedUrl'  => 'http://images.wikia.com/messaging/images//e/e8/Avatar2.jpg',
+				'expectedUrl'  => 'http://images.wikia.com/messaging/images/e/e8/Avatar2.jpg',
 			],
 		];
 	}
@@ -75,6 +78,23 @@ class MastheadTest extends WikiaBaseTest {
 			],
 			[
 				'/f/fc/119245.png',
+				false
+			],
+			# PLATFORM-1617: full URLs
+			[
+				'http://images.wikia.com/messaging/images//1/19/Avatar.jpg',
+				true
+			],
+			[
+				'http://images.wikia.com/messaging/images/e/e5/Avatar4.jpg',
+				true
+			],
+			[
+				'http://images.wikia.com/common/avatars/3/3b/27078273.png',
+				false
+			],
+			[
+				'http://static.wikia.nocookie.net/ba2cd689-8297-4fba-b739-0b6e08efc794',
 				false
 			]
 		];

@@ -2,6 +2,7 @@
 
 namespace Wikia\ContentReview;
 
+use Wikia\Interfaces\IRequest;
 use Wikia\ContentReview\Models\CurrentRevisionModel;
 use Wikia\ContentReview\Models\ReviewModel;
 
@@ -13,6 +14,8 @@ class Helper extends \ContextSource {
 	const CONTENT_REVIEW_REVIEWED_KEY = 'reviewed-js-pages';
 	const CONTENT_REVIEW_CURRENT_KEY = 'current-js-pages';
 	const JS_FILE_EXTENSION = '.js';
+
+	const DEV_WIKI_ID = 7931;
 
 
 	/**
@@ -227,7 +230,7 @@ class Helper extends \ContextSource {
 			return true;
 		}
 
-		$reviewData = $reviewModel->getReviewedContent( $wikiId, $pageId, ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW );
+		$reviewData = $reviewModel->getReviewOfPageByStatus( $wikiId, $pageId, ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW );
 		return ( !empty( $reviewData ) && (int)$reviewData['revision_id'] === $diff );
 	}
 
@@ -240,31 +243,51 @@ class Helper extends \ContextSource {
 		global $wgCityId;
 
 		$title = $this->getTitle();
+		$contentReviewRequest = $this->getRequest()->getBool( self::CONTENT_REVIEW_PARAM );
 
 		if ( $title->inNamespace( NS_MEDIAWIKI )
+			&& $contentReviewRequest
 			&& $title->isJsPage()
 			&& $title->userCan( 'content-review' )
 		) {
+			$reviewModel = new ReviewModel();
+
 			$diffRevisionId = $this->getRequest()->getInt( 'diff' );
-			$diffRevisionInfo = ( new ReviewModel() )->getRevisionInfo(
+			$articleId = $title->getArticleID();
+			$diffRevisionInfo = $reviewModel->getRevisionInfo(
 				$wgCityId,
-				$title->getArticleID(),
+				$articleId,
 				$diffRevisionId
 			);
 
 			$status = (int)$diffRevisionInfo['status'];
-			return ( $status === ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW
-				/* Fallback to URL param if a master-slave replication has not finished */
-				|| ( $this->getRequest()->getInt( self::CONTENT_REVIEW_PARAM ) === 1
-					&& $status === ReviewModel::CONTENT_REVIEW_STATUS_UNREVIEWED
-				)
-			);
+
+			// Always make sure it's in review if this is a content review request
+			if ( $status === ReviewModel::CONTENT_REVIEW_STATUS_UNREVIEWED ) {
+				$reviewerId = $this->getUser()->getId();
+				try {
+					$reviewModel->updateRevisionStatus( $wgCityId, $articleId, $status,
+						ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW, $reviewerId );
+				} catch ( \FluentSql\Exception\SqlException $e ) {
+					// Master-slave replication has not finished, ignore
+				}
+
+				return true;
+			}
+
+			return ( $status === ReviewModel::CONTENT_REVIEW_STATUS_IN_REVIEW );
 		}
 
 		return false;
 	}
 
-	public function getToolbarTemplate() {
+	/**
+	 * Returns an HTML with a toolbar displayed to reviewers.
+	 * @param int $revisionId An ID of the revision that is currently being reviewed
+	 * @return string
+	 * @throws \Exception
+	 */
+	public function getToolbarTemplate( $revisionId ) {
 		global $wgCityId;
 
 		return \MustacheService::getInstance()->render(
@@ -277,7 +300,7 @@ class Helper extends \ContextSource {
 				'buttonApproveText' => wfMessage( 'content-review-diff-approve' )->plain(),
 				'rejectStatus' => ReviewModel::CONTENT_REVIEW_STATUS_REJECTED,
 				'buttonRejectText' => wfMessage( 'content-review-diff-reject' )->plain(),
-				'talkpageUrl' => $this->prepareProvideFeedbackLink( $this->getTitle() ),
+				'talkpageUrl' => $this->prepareProvideFeedbackLink( $this->getTitle(), $revisionId ),
 				'talkpageLinkText' => wfMessage( 'content-review-diff-toolbar-talkpage' )->plain(),
 				'guidelinesUrl' => wfMessage( 'content-review-diff-toolbar-guidelines-url' )->useDatabase( false )->plain(),
 				'guidelinesLinkText' => wfMessage( 'content-review-diff-toolbar-guidelines' )->plain(),
@@ -288,15 +311,39 @@ class Helper extends \ContextSource {
 	/**
 	 * Link for adding new section on script talk page. Prefilled with standard explanation of rejection.
 	 * @param \Title $title Title object of JS page
+	 * @param int $revisionId
 	 * @return string full link to edit page
 	 */
-	public function prepareProvideFeedbackLink( \Title $title ) {
+	public function prepareProvideFeedbackLink( \Title $title, $revisionId = 0 ) {
 		$params = [
 			'action' => 'edit',
 			'section' => 'new',
-			'useMessage' => 'content-review-rejection-explanation'
+			'useMessage' => 'content-review-rejection-explanation',
 		];
+
+		if ( (int)$revisionId !== 0 ) {
+			$params['messageParams'] = [
+				1 => wfMessage( 'content-review-rejection-explanation-title' )->params( $revisionId )->escaped(),
+				2 => $title->getFullURL( "oldid={$revisionId}" ),
+				3 => $revisionId,
+			];
+		}
+
 		return $title->getTalkPage()->getFullURL( $params );
+	}
+
+	/**
+	 * Returns an ID of a revision that is currently being reviewed. It is either a value of
+	 * `diff` URL parameter or `oldid` if `diff` is not present.
+	 * @param IRequest $request An object of a class implementing the IRequest interface
+	 * @return null|int
+	 */
+	public function getCurrentlyReviewedRevisionId( IRequest $request ) {
+		$revisionId = $request->getVal( 'diff' );
+		if ( $revisionId === null ) {
+			$revisionId = $request->getVal( 'oldid' );
+		}
+		return $revisionId;
 	}
 
 	public function purgeReviewedJsPagesTimestamp() {
@@ -326,30 +373,30 @@ class Helper extends \ContextSource {
 	 * @param \Title $title
 	 * @param string $contentType
 	 * @param string $text
+	 * @return String
 	 */
-	public function replaceWithLastApproved( \Title $title, $contentType, &$text ) {
-		global $wgCityId, $wgJsMimeType;
+	public function replaceWithLastApproved( \Title $title, $contentType, $text ) {
+		global $wgCityId;
 
-		if ( $title->isJsPage()
-			|| ( $title->inNamespace( NS_MEDIAWIKI ) && $contentType == $wgJsMimeType )
-		) {
+		if ( $this->isPageReviewed( $title, $contentType ) ) {
 			$pageId = $title->getArticleID();
 			$latestRevId = $title->getLatestRevID();
-
 			$latestReviewedRevData = $this->getCurrentRevisionModel()->getLatestReviewedRevision( $wgCityId, $pageId );
 
-			if ( $latestReviewedRevData['revision_id'] != $latestRevId
+			if ( $latestReviewedRevData['revision_id'] !== $latestRevId
 				&& !$this->isContentReviewTestModeEnabled()
 			) {
 				$revision = $this->getRevisionById( $latestReviewedRevData['revision_id'] );
 
-				if ( $revision ) {
-					$text = $revision->getRawText();
-				} else {
-					$text = '';
+				if ( $revision instanceof \Revision ) {
+					return $revision->getRawText();
 				}
+
+				return '';
 			}
 		}
+
+		return $text;
 	}
 
 	/**
@@ -376,5 +423,18 @@ class Helper extends \ContextSource {
 	public function userCanAutomaticallyApprove( \User $user ) {
 		return $user->isAllowed( 'content-review' )
 			&& $user->getRequest()->getBool( 'wpApprove' );
+	}
+
+	/**
+	 * Checks if a page should be even consider for content replacement with an approved revision.
+	 * @param \Title $title
+	 * @param $contentType
+	 * @return bool
+	 */
+	public function isPageReviewed( \Title $title, $contentType ) {
+		global $wgJsMimeType;
+
+		return $title->isJsPage()
+			|| $title->inNamespace( NS_MEDIAWIKI ) && $contentType === $wgJsMimeType;
 	}
 }
