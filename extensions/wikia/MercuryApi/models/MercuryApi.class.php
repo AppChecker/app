@@ -132,8 +132,9 @@ class MercuryApi {
 			'siteName' => $wgSitename,
 			'theme' => SassUtil::getOasisSettings(),
 			'tracking' => [
+				'ivw3' => AnalyticsProviderIVW3::isEnabled(),
+				'nielsen' => AnalyticsProviderNielsen::isEnabled(),
 				'vertical' => HubService::getVerticalNameForComscore( $wgCityId ),
-				'nielsen' => AnalyticsProviderNielsen::isEnabled()
 			],
 			'wikiCategories' => WikiFactoryHub::getInstance()->getWikiCategoryNames( $wgCityId )
 		];
