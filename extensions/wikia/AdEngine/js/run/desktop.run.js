@@ -145,7 +145,7 @@ require([
 		}
 
 		if (floatingMedrec) {
-			floatingMedrec.init();
+			win.wgAfterContentAndJS.push(floatingMedrec.init);
 		}
 	}
 
