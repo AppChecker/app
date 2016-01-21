@@ -76,33 +76,41 @@ class InsightsHelper {
 	 */
 	public static function getInsightsPages() {
 		global $wgEnableInsightsInfoboxes, $wgEnableFlagsExt, $wgEnableTemplateClassificationExt,
-			   $wgEnableInsightsPagesWithoutInfobox, $wgEnableInsightsTemplatesWithoutType;
+			   $wgEnableInsightsPagesWithoutInfobox, $wgEnableInsightsPopularPages, $wgEnableInsightsTemplatesWithoutType;
 
 		/* Order of inserting determines default order on insights entry points list */
-		$dynamicInsights = [];
+		$insightsPages = [];
 
 		/* Add TemplatesWithoutType insight */
 		if ( !empty( $wgEnableTemplateClassificationExt ) && !empty( $wgEnableInsightsTemplatesWithoutType ) ) {
-			$dynamicInsights[InsightsTemplatesWithoutTypeModel::INSIGHT_TYPE] = 'InsightsTemplatesWithoutTypeModel';
+			$insightsPages[InsightsTemplatesWithoutTypeModel::INSIGHT_TYPE] = 'InsightsTemplatesWithoutTypeModel';
 		}
 
 		/* Add Infoboxes insight */
 		if ( !empty( $wgEnableInsightsInfoboxes ) ) {
-			$dynamicInsights[InsightsUnconvertedInfoboxesModel::INSIGHT_TYPE] = 'InsightsUnconvertedInfoboxesModel';
+			$insightsPages[InsightsUnconvertedInfoboxesModel::INSIGHT_TYPE] = 'InsightsUnconvertedInfoboxesModel';
 		}
 
-		/* Add PagesWithoutInfobox insight */
-		if ( !empty( $wgEnableTemplateClassificationExt ) && !empty( $wgEnableInsightsPagesWithoutInfobox ) ) {
-			$dynamicInsights[InsightsPagesWithoutInfoboxModel::INSIGHT_TYPE] = 'InsightsPagesWithoutInfoboxModel';
+		/* Add PopularPages insight */
+		if ( !empty( $wgEnableInsightsPopularPages ) ) {
+			$insightsPages[InsightsPopularPagesModel::INSIGHT_TYPE] = 'InsightsPopularPagesModel';
 		}
 
 		/* Add Flags insight */
 		if ( !empty( $wgEnableFlagsExt ) ) {
-			$dynamicInsights[InsightsFlagsModel::INSIGHT_TYPE] = 'InsightsFlagsModel';
+			$insightsPages[InsightsFlagsModel::INSIGHT_TYPE] = 'InsightsFlagsModel';
 		}
 
+		/* Add default insights */
+		$insightsPages = array_merge( $insightsPages, self::$defaultInsights );
 
-		return array_merge( $dynamicInsights, self::$defaultInsights );
+		/* Add PagesWithoutInfobox insight */
+		if ( !empty( $wgEnableTemplateClassificationExt ) && !empty( $wgEnableInsightsPagesWithoutInfobox ) ) {
+			$insightsPages[InsightsPagesWithoutInfoboxModel::INSIGHT_TYPE] = 'InsightsPagesWithoutInfoboxModel';
+		}
+
+		return $insightsPages;
+
 	}
 
 	/**
@@ -156,10 +164,11 @@ class InsightsHelper {
 	 * Returns a specific subpage model
 	 * If it does not exist a user is redirected to the Special:Insights landing page
 	 *
-	 * @param $type string|null A slug of a subpage
+	 * @param $type string|null A slug of a type
+	 * @param $subpage string|null A slug of a subpage
 	 * @return InsightsModel|null
 	 */
-	public static function getInsightModel( $type, $subpage ) {
+	public static function getInsightModel( $type, $subpage = null ) {
 		if ( self::isInsightPage( $type ) ) {
 			$insightsPages = self::getInsightsPages();
 			$modelName = $insightsPages[$type];
@@ -191,12 +200,19 @@ class InsightsHelper {
 		$highlightedInsighs = self::getHighlightedInsights();
 
 		foreach ( $insightsPages as $key => $class ) {
-			$insightsList[$key] = [
-				'subtitle' => self::INSIGHT_SUBTITLE_MSG_PREFIX . $key,
-				'description' => self::INSIGHT_DESCRIPTION_MSG_PREFIX . $key,
-				'count' => $this->prepareCountDisplay( $insightsCountService->getCount( $key ) ),
-				'highlighted' => in_array( $key, $highlightedInsighs )
-			];
+			if ( class_exists( $class ) ) {
+				$insightModel =  new $class();
+				$count = $insightModel->getConfig()->getInsightUsage() == InsightsModel::INSIGHTS_USAGE_ACTIONABLE
+					? $this->prepareCountDisplay( $insightsCountService->getCount( $key ) )
+					: false;
+
+				$insightsList[$key] = [
+					'subtitle' => self::INSIGHT_SUBTITLE_MSG_PREFIX . $key,
+					'description' => self::INSIGHT_DESCRIPTION_MSG_PREFIX . $key,
+					'count' => $count,
+					'highlighted' => in_array( $key, $highlightedInsighs )
+				];
+			}
 		}
 		return $insightsList;
 	}
