@@ -65,6 +65,7 @@ $config['adengine2_desktop_js'] = array(
 		'//extensions/wikia/AdEngine/js/AdDecoratorLegacyParamFormat.js',
 		'//extensions/wikia/AdEngine/js/AdDecoratorPageDimensions.js',
 		'//extensions/wikia/AdEngine/js/AdEngine2.js',
+		'//extensions/wikia/AdEngine/js/AdEngineRunner.js',
 		'//extensions/wikia/AdEngine/js/AdLogicDartSubdomain.js',
 		'//extensions/wikia/AdEngine/js/AdLogicHighValueCountry.js',
 		'//extensions/wikia/AdEngine/js/AdLogicPageDimensions.js',
@@ -777,6 +778,7 @@ $config['mobile_base_ads_js'] = array(
 		'//extensions/wikia/AdEngine/js/AdContext.js',
 		'//extensions/wikia/AdEngine/js/AdDecoratorLegacyParamFormat.js',
 		'//extensions/wikia/AdEngine/js/AdEngine2.js',
+		'//extensions/wikia/AdEngine/js/AdEngineRunner.js',
 		'//extensions/wikia/AdEngine/js/AdLogicPageParams.js',
 		'//extensions/wikia/AdEngine/js/AdTracker.js',
 		'//extensions/wikia/AdEngine/js/DartUrl.js',
@@ -2644,6 +2646,13 @@ $config['content_review_diff_page_scss'] = [
 	'assets' => [
 		'//extensions/wikia/ContentReview/styles/ContentReviewDiffPage.scss',
 	]
+];
+
+$config['content_review_special_page_scss'] = [
+	'type' => AssetsManager::TYPE_SCSS,
+	'assets' => [
+		'//extensions/wikia/ContentReview/styles/ContentReviewSpecialPage.scss'
+	],
 ];
 
 $config['auth_modal_scss'] = array(
