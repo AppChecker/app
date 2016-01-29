@@ -28,7 +28,7 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 					targeting: {loc: 'footer'}
 				},
 				INCONTENT_BOXAD_1: {
-					sizes: [[300, 250]],
+					sizes: [[300, 250], [300, 600]],
 					targeting: {loc: 'middle'}
 				},
 				PREFOOTER_LEFT_BOXAD: {
@@ -48,11 +48,11 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 					sizes: [[300, 250]]
 				},
 				MOBILE_TOP_LEADERBOARD: {
-					sizes: [[320, 50]]
+					sizes: [[320, 50], [300, 250]]
 				}
 			}
 		},
-		context = adContext.getContext(),
+		context,
 		logGroup = 'ext.wikia.adEngine.lookup.rubiconFastlane',
 		priceMap = {},
 		rubiconSlots = [],
@@ -61,16 +61,27 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 		rubiconLibraryUrl = '//ads.rubiconproject.com/header/7450.js',
 		slots = {};
 
+	function compareTiers(a,b) {
+		var aMatches = /^(\d+)/.exec(a),
+			bMatches = /^(\d+)/.exec(b);
+
+		if (aMatches && bMatches) {
+			return parseInt(aMatches[1], 10) > parseInt(bMatches[1], 10) ? 1 : -1;
+		}
+
+		return 0;
+	}
+
 	function addSlotPrice(slotName, rubiconTargeting) {
 		rubiconTargeting.forEach(function (params) {
 			if (params.key === rubiconTierKey) {
-				priceMap[slotName] = params.values.join(',');
+				priceMap[slotName] = params.values.sort(compareTiers).join(',');
 			}
 		});
 	}
 
 	function setTargeting(slotName, targeting, rubiconSlot, provider) {
-		var s1 = context.targeting.wikiIsTop1000 ? adLogicZoneParams.getMappedVertical() : 'not a top1k wiki';
+		var s1 = context.targeting.wikiIsTop1000 ? adLogicZoneParams.getName() : 'not a top1k wiki';
 		if (targeting) {
 			Object.keys(targeting).forEach(function (key) {
 				rubiconSlot.setFPI(key, targeting[key]);
@@ -100,6 +111,29 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 		});
 	}
 
+	function configureHomePageSlots() {
+		var slotName;
+		for (slotName in slots) {
+			if (slots.hasOwnProperty(slotName) && slotName.indexOf('TOP') > -1) {
+				slots['HOME_' + slotName] = slots[slotName];
+				delete slots[slotName];
+			}
+		}
+		slots.PREFOOTER_MIDDLE_BOXAD = {
+			sizes: [[300, 250]],
+			targeting: {loc: 'footer'}
+		};
+	}
+
+	function getSlots(skin) {
+		slots = config[skin];
+		if (skin === 'oasis' && context.targeting.pageType === 'home') {
+			configureHomePageSlots();
+		}
+
+		return slots;
+	}
+
 	function defineSlots(skin, onResponse) {
 		var definedSlots = getSlots(skin);
 		Object.keys(definedSlots).forEach(function (slotName) {
@@ -112,32 +146,18 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 		});
 	}
 
-	function configureHomePageSlots() {
-		var slotName;
-		for (slotName in slots) {
-			if (slots.hasOwnProperty(slotName) && slotName.indexOf('TOP') > -1) {
-				slots['HOME_' + slotName] = slots[slotName];
-				delete slots[slotName];
-			}
-		}
-	}
-
-	function getSlots(skin) {
-		slots = config[skin];
-		if (skin === 'oasis' && context.targeting.pageType === 'home') {
-			configureHomePageSlots();
-		}
-
-		return slots;
-	}
-
 	function getSlotParams(slotName) {
 		var targeting,
+			values,
 			parameters = {};
 
 		targeting = slots[slotName].getAdServerTargeting();
 		targeting.forEach(function (params) {
 			if (params.key !== rubiconElementKey) {
+				values = params.values;
+				if (typeof values.sort === 'function') {
+					values.sort(compareTiers);
+				}
 				parameters[params.key] = params.values;
 			}
 		});
@@ -147,7 +167,7 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 
 	function encodeParamsForTracking(params) {
 		if (!params[rubiconTierKey]) {
-			return {};
+			return;
 		}
 
 		return params[rubiconTierKey].join(';');
@@ -175,11 +195,8 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 		rubicon.src = rubiconLibraryUrl;
 
 		node.parentNode.insertBefore(rubicon, node);
+		context = adContext.getContext();
 		defineSlots(skin, onResponse);
-	}
-
-	function isEnabled() {
-		return context.opts.rubiconFastlaneOnAllVerticals || adLogicZoneParams.getSite() === 'life';
 	}
 
 	function getPrices() {
@@ -193,7 +210,6 @@ define('ext.wikia.adEngine.lookup.rubiconFastlane', [
 	return factory.create({
 		logGroup: logGroup,
 		name: 'rubicon_fastlane',
-		isEnabled: isEnabled,
 		call: call,
 		calculatePrices: calculatePrices,
 		getPrices: getPrices,

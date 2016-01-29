@@ -157,8 +157,12 @@ class LicensedVideoSwapSpecialController extends WikiaSpecialPageController {
 	 * @responseParam string html
 	 * @responseParam integer totalVideos - total videos with suggestions
 	 * @responseParam string redirect - redirect url
+	 *
+	 * @throws BadRequestException
 	 */
 	public function swapVideo() {
+		$this->checkWriteRequest();
+
 		$videoTitle = $this->request->getVal( 'videoTitle', '' );
 		$newTitle = $this->request->getVal( 'newTitle', '' );
 		$currentPage = $this->getVal( 'currentPage', 1 );
@@ -321,8 +325,12 @@ class LicensedVideoSwapSpecialController extends WikiaSpecialPageController {
 	 * @responseParam string html
 	 * @responseParam integer totalVideos - total videos with suggestions
 	 * @responseParam string redirect - redirect url
+	 *
+	 * @throws BadRequestException
 	 */
 	public function keepVideo() {
+		$this->checkWriteRequest();
+
 		$videoTitle = $this->request->getVal( 'videoTitle', '' );
 		$forever = $this->request->getVal( 'forever', '' );
 		$suggestions = $this->request->getVal( 'suggestions', array() );
@@ -617,7 +625,7 @@ class LicensedVideoSwapSpecialController extends WikiaSpecialPageController {
 		$user = $this->getUser();
 		$visitedList = $user->getGlobalAttribute( LicensedVideoSwapHelper::USER_VISITED_LIST );
 		if ( $visitedList ) {
-			$visitedList = unserialize( $visitedList );
+			$visitedList = Wikia\Util\Serialize::safeUnserialize( $visitedList );
 		} else {
 			$visitedList = [];
 		}

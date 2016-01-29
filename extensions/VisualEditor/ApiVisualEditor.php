@@ -76,16 +76,31 @@ class ApiVisualEditor extends ApiBase {
 			// served directly from Varnish, in  which case discard the value of the XPP header
 			// and use it to declare the cache hit instead.
 			$xCache = $req->getResponseHeader( 'X-Cache' );
-			if ( is_string( $xCache ) && strpos( $xCache, 'hit' ) !== false ) {
+			$hit = false;
+			if ( is_string( $xCache ) && strpos( $xCache, 'HIT' ) !== false ) {
 				$xpp = 'cached-response=true';
+				$hit = true;
 			} else {
 				$xpp = $req->getResponseHeader( 'X-Parsoid-Performance' );
 			}
+
+			// we cache only GET requests so hit ratio tracking makes sense only in such case
+			if ( $method === 'GET' ) {
+				\Wikia\Logger\WikiaLogger::instance()->info( 'ApiVisualEditor_requestParsoid', [
+					// sending string instead of boolean because our elasticsearch/kibana does not support the latter well
+					'hit' => $hit ? 'yes' : 'no'
+				] );
+			}
+
 			if ( $xpp !== null ) {
 				$resp = $this->getRequest()->response();
 				$resp->header( 'X-Parsoid-Performance: ' . $xpp );
 			}
 		} elseif ( $status->isGood() ) {
+			\Wikia\Logger\WikiaLogger::instance()->error( 'ApiVisualEditor_requestParsoid', [
+				'method' => $method,
+				'error' => 'parsoidserver-http-' . $req->getStatus()
+			] );
 			$this->dieUsage( $req->getContent(), 'parsoidserver-http-' . $req->getStatus() );
 		} elseif ( $errors = $status->getErrorsByType( 'error' ) ) {
 			$error = $errors[0];
@@ -95,6 +110,10 @@ class ApiVisualEditor extends ApiBase {
 			} else {
 				$message = 'MWHttpRequest error';
 			}
+			\Wikia\Logger\WikiaLogger::instance()->error( 'ApiVisualEditor_requestParsoid', [
+				'method' => $method,
+				'error' => 'parsoidserver-' . $code
+			] );
 			$this->dieUsage( "$message: " . $req->getContent(), 'parsoidserver-' . $code );
 		}
 		// TODO pass through X-Parsoid-Performance header, merge with getHTML above
