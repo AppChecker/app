@@ -120,7 +120,7 @@ describe('Loader Module', function () {
 			resources: ['mustache']
 		}).
 		done(function () {
-			expect(mwMock.loader.use).toHaveBeenCalled();
+			expect(mwMock.loader.using).toHaveBeenCalled();
 			done();
 		});
 	});
