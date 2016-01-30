@@ -1266,7 +1266,7 @@ class Parser {
 			)!xu', array( &$this, 'magicLinkCallback' ), $text );
 
 		if ( preg_last_error() !== 0 ) {
-			\Wikia\Logger\WikiaLogger::instance()->notice( 'PCRE error', [ 'preg_last_error' => preg_last_error() ] );
+			\Wikia\Logger\WikiaLogger::instance()->error( 'PCRE error', [ 'preg_last_error' => preg_last_error() ] );
 		}
 
 		wfProfileOut( __METHOD__ );
