@@ -94,7 +94,7 @@ describe('Loader Module', function () {
 	it('RL module is properly loaded', function (done) {
 		var mwMock = {
 				loader: {
-					use: function (use) {
+					using: function (use) {
 						expect(JSON.stringify(use)).toEqual('["jquery.mustache"]');
 
 						// mock and return deferred object
