@@ -113,7 +113,7 @@ describe('Loader Module', function () {
 			loader = modules['wikia.loader'](windowMock, mwMock, nirvanaMock, jQuery, logMock, fbLocale);
 
 		// check calls to this function
-		spyOn(mwMock.loader, 'use').and.callThrough();
+		spyOn(mwMock.loader, 'using').and.callThrough();
 
 		loader({
 			type: loader.LIBRARY,
