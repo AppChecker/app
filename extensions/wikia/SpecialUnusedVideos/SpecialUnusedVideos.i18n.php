@@ -18,6 +18,14 @@ $messages['qqq'] = array(
 	'unusedvideostext' => 'This is the description for Special:UnusedVideos page',
 );
 
+$messages['es'] = array(
+	'unusedvideos' => 'Videos sin utilizar',
+);
+
 $messages['it'] = array(
 	'unusedvideos' => 'Video inutilizzati',
+);
+
+$messages['pt'] = array(
+	'unusedvideos' => 'Vídeos não usados',
 );
