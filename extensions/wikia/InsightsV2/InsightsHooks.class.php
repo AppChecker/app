@@ -14,6 +14,12 @@ class InsightsHooks {
 	 * Check if article is in insights flow and init script to show banner with message and next steps
 	 */
 	public static function onBeforePageDisplay( OutputPage $out, Skin $skin ) {
+		global $wgEnableGlobalShortcutsExt;
+
+		if ( !empty( $wgEnableGlobalShortcutsExt ) ) {
+			\Wikia::addAssetsToOutput( 'insights_globalshortcuts_js' );
+		}
+
 		$subpage = $out->getRequest()->getVal( 'insights', null );
 
 		// Load scripts for pages in insights loop
@@ -100,10 +106,16 @@ class InsightsHooks {
 	 */
 	public static function onwgQueryPages( Array &$wgQueryPages ) {
 		global $wgEnableInsightsInfoboxes, $wgEnableTemplateClassificationExt,
-			   $wgEnableInsightsPagesWithoutInfobox, $wgEnableInsightsTemplatesWithoutType;
+			   $wgEnableInsightsPagesWithoutInfobox, $wgEnableInsightsPopularPages, $wgEnablePopularPagesQueryPage,
+			   $wgEnableInsightsTemplatesWithoutType;
 
 		if ( !empty( $wgEnableInsightsInfoboxes ) ) {
 			$wgQueryPages[] = [ 'UnconvertedInfoboxesPage', 'Nonportableinfoboxes' ];
+		}
+
+		//TODO remove $wgEnablePopularPagesQueryPage variable after $wgEnableInsightsPopularPages is set to true
+		if ( !empty( $wgEnableInsightsPopularPages ) || !empty( $wgEnablePopularPagesQueryPage ) ) {
+			$wgQueryPages[] = [ 'PopularPages', 'Popularpages' ];
 		}
 
 		if ( !empty( $wgEnableTemplateClassificationExt ) ) {
@@ -128,7 +140,7 @@ class InsightsHooks {
 	public static function onAfterUpdateSpecialPages( $queryPage ) {
 		$queryPageName = strtolower( $queryPage->getName() );
 
-		$model = InsightsHelper::getInsightModel( $queryPageName, null );
+		$model = InsightsHelper::getInsightModel( $queryPageName );
 
 		if ( $model instanceof InsightsQueryPageModel && $model->purgeCacheAfterUpdateTask() ) {
 			( new InsightsCache( $model->getConfig() ) )->purgeInsightsCache();
@@ -144,9 +156,9 @@ class InsightsHooks {
 		if ( !RecognizedTemplatesProvider::isUnrecognized( $templateType ) ) {
 			$model = new InsightsTemplatesWithoutTypeModel();
 			$model->removeFixedItem( TemplatesWithoutTypePage::TEMPLATES_WITHOUT_TYPE_TYPE, $title );
-			$model->updateInsightsCache( $pageId );
+			( new InsightsCache( $model->getConfig() ) )->updateInsightsCache( $pageId );
 		}
 		return true;
 	}
 
-} 
+}
