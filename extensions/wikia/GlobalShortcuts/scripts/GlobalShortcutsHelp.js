@@ -21,7 +21,6 @@ define('GlobalShortcutsHelp',
 							'extensions/wikia/GlobalShortcuts/templates/GlobalShortcutsController_help.mustache',
 						messages: 'GlobalShortcuts',
 						callback: function (pkg) {
-							mw.messages.set(pkg.messages);
 							templates.keyCombination = pkg.mustache[0];
 							templates.help = pkg.mustache[1];
 							dfd.resolve(templates);
@@ -64,7 +63,7 @@ define('GlobalShortcutsHelp',
 			var comboNum = 0,
 				combosCount,
 				keyCombination = [],
-				keyCombinationHtml = '',
+				keyCombinationHtml,
 				keysCount,
 				templateParams;
 
@@ -110,7 +109,7 @@ define('GlobalShortcutsHelp',
 			modalInstance.show();
 			// Add footer hint
 			modalInstance.$element.find('footer')
-				.html(mw.message('template-class-global-shortcuts-press-to-explore-shortcuts', dotKey).parse());
+				.html(mw.message('global-shortcuts-press-to-explore-shortcuts', dotKey).parse());
 		}
 
 		function setupModal(content) {
