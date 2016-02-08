@@ -28,7 +28,7 @@ define('ext.wikia.adEngine.provider.taboola', [
 			  'recovery': ['XX'],
 			  'regular': ['XX']
 			},
-			'TOP_LEADERBOARD': {
+			'TOP_LEADERBOARD_ABP': {
 			  'recovery': ['XX'],
 			  'regular': ['XX']
 			},
@@ -56,7 +56,7 @@ define('ext.wikia.adEngine.provider.taboola', [
 				mode: 'thumbnails-rr',
 				label: 'Right Rail Thumbnails - '
 			},
-			'TOP_LEADERBOARD': {
+			'TOP_LEADERBOARD_ABP': {
 				id: 'taboola-above-article-thumbnails',
 				mode: 'thumbnails-h-abp',
 		    label: 'Above Article Thumbnails'
