@@ -66,6 +66,13 @@ $wikia-top-ads-index: 2;
 
 #TOP_LEADERBOARD_ABP {
 	max-width: $page-width-medium;
+	margin: 0 auto;
+	position: relative;
+	z-index: 2;
+
+	.thumbnails-h-abp {
+		border: none;
+	}
 }
 
 /** Skyscrapers **/
