@@ -64,6 +64,10 @@ $wikia-top-ads-index: 2;
 	}
 }
 
+#TOP_LEADERBOARD_ABP {
+	max-width: $page-width-medium;
+}
+
 /** Skyscrapers **/
 @media #{$breakpoint-small-plus-up} {
 	#WikiaRail.left-skyscraper-3-present {
@@ -240,7 +244,7 @@ body >a >img[src$="noad.gif"] {
 	max-width: 700px;
 }
 
-#NATIVE_TABOOLA_ARTICLE, #NATIVE_TABOOLA_RAIL, #RECIRCULATION_RAIL {
+#NATIVE_TABOOLA_ARTICLE, #NATIVE_TABOOLA_RAIL, #TOP_LEADERBOARD_ABP, #RECIRCULATION_RAIL {
 	.trc_rbox_header .trc_rbox_header_span {
 		color: $color-page-opposite;
 	}

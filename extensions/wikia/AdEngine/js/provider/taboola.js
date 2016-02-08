@@ -30,7 +30,7 @@ define('ext.wikia.adEngine.provider.taboola', [
 			},
 			'TOP_LEADERBOARD_ABP': {
 			  'recovery': ['XX'],
-			  'regular': ['XX']
+			  'regular': []
 			},
 		},
 		context = adContext.getContext(),
