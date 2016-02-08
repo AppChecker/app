@@ -16,10 +16,23 @@ define('ext.wikia.adEngine.provider.taboola', [
 	'use strict';
 
 	var abGroups = {
-			recovery: abTest.getGroup('PROJECT_43_TABOOLA') === 'YES',
-			regular: abTest.getGroup('NATIVE_ADS_TABOOLA') === 'YES'
+			recovery: true, //abTest.getGroup('PROJECT_43_TABOOLA') === 'YES',
+			regular: true //abTest.getGroup('NATIVE_ADS_TABOOLA') === 'YES'
 		},
-		config = instantGlobals.wgAdDriverTaboolaConfig || {},
+		config = {
+			'NATIVE_TABOOLA_RAIL': {
+			  'recovery': ['XX'],
+			  'regular': [ 'XX', 'non-US', 'non-CA', 'non-GB', 'non-AU', 'non-DE', 'non-JP' ]
+			},
+			'NATIVE_TABOOLA_ARTICLE': {
+			  'recovery': ['XX'],
+			  'regular': ['XX']
+			},
+			'TOP_LEADERBOARD': {
+			  'recovery': ['XX'],
+			  'regular': ['XX']
+			},
+		},
 		context = adContext.getContext(),
 		logGroup = 'ext.wikia.adEngine.provider.taboola',
 		mappedVerticals = {
@@ -42,6 +55,11 @@ define('ext.wikia.adEngine.provider.taboola', [
 				id: 'taboola-right-rail-thumbnails',
 				mode: 'thumbnails-rr',
 				label: 'Right Rail Thumbnails - '
+			},
+			'TOP_LEADERBOARD': {
+				id: 'taboola-above-article-thumbnails',
+				mode: 'thumbnails-h-abp',
+		    label: 'Above Article Thumbnails'
 			}
 		},
 		supportedSlots = {
