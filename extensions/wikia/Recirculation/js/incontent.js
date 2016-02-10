@@ -8,6 +8,9 @@ require([
 	'ext.wikia.recirculation.templates.mustache',
 	'ext.wikia.recirculation.tracker'
 ], function ($, w, abTest, nirvana, Mustache, templates, tracker) {
+	// Currently only showing for English communities
+	if (w.wgContentLanguage !== 'en') { return; }
+
 	var $container = $('#mw-content-text');
 
 	function injectInContentWidget($container) {
@@ -81,31 +84,6 @@ require([
 	}
 
 	/**
-	 * Calculate the section height before or after injecting an ad to it
-	 *
-	 * @param {Section} section
-	 * @returns {number}
-	 */
-	function getSectionHeight(section) {
-		var $firstElement = section.$ad || section.$firstElement,
-			firstElementOffset = $firstElement.offset(),
-			offsetTop = firstElementOffset && firstElementOffset.top,
-			offsetBottom;
-
-		if (offsetTop === undefined) {
-			return 0;
-		}
-
-		if (section.$end.length) {
-			offsetBottom = section.$end.offset().top;
-		} else {
-			offsetBottom = $container.offset().top + $container.outerHeight(true);
-		}
-
-		return offsetBottom - offsetTop;
-	}
-
-	/**
 	 * Build the sections array
 	 *
 	 * DOM/layout querying: OK
@@ -121,29 +99,17 @@ require([
 			intro,
 			$start,
 			$end,
-			$firstElement,
 			section;
 
 		for (i = 0, len = $headers.length; i < len + 1; i += 1) {
 			intro = (i === 0);
 			$start = !intro && $headers.eq(i - 1);
 			$end = $headers.eq(i);
-			$firstElement = intro ? $container.children().first() : $start.next();
-			// Elements with display: none don't alter the layout
-			while ($firstElement.css('display') === 'none') {
-				$firstElement = $firstElement.next();
-			}
 			section = {
 				intro: intro,
-				name: intro ? 'TOP' : $start.children().first().text(),
-				nextName: $end.length ? $end.children().first().text() : 'BOTTOM',
 				$start: intro ? undefined : $start,
-				$end: $end,
-				$firstElement: $firstElement,
-				firstElementFloat: $firstElement.css('float')
+				$end: $end
 			};
-
-			section.height = getSectionHeight(section);
 			section.width = $start && $start.outerWidth();
 
 			sections.push(section);
@@ -209,9 +175,9 @@ require([
 		return sortedKeys;
 	}
 
-	// if (abTest.inGroup('RECIRCULATION_INCONTENT', 'YES')) {
+	if (abTest.inGroup('RECIRCULATION_INCONTENT', 'YES')) {
 		$(document).ready( function() {
 			injectInContentWidget($container);
 		});
-	// }
+	}
 });
