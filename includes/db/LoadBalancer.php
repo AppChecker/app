@@ -1003,14 +1003,6 @@ class LoadBalancer {
 	public function getReadOnlyReason( $wiki = false ) {
 		if ( $this->readOnlyReason !== false ) {
 			return $this->readOnlyReason;
-		} elseif ( $this->getLaggedSlaveMode( $wiki ) ) {
-			if ( $this->slavesDownMode ) {
-				return 'The database has been automatically locked ' .
-				'until the slave database servers become available';
-			} else {
-				return 'The database has been automatically locked ' .
-				'while the slave database servers catch up to the master.';
-			}
 		}
 
 		return false;
