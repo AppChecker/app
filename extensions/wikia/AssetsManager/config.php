@@ -131,6 +131,7 @@ $config['recirculation_js'] = array(
 	'assets' => array(
 		'#group_videos_module_js',
 		'//extensions/wikia/Recirculation/js/tracker.js',
+		'//extensions/wikia/Recirculation/js/utils.js',
 		'//extensions/wikia/Recirculation/js/incontent.js',
 		'//extensions/wikia/Recirculation/js/recirculation.js',
 		'//extensions/wikia/Recirculation/js/templates.mustache.js',
